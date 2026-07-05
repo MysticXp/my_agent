@@ -1,0 +1,55 @@
+# agent/graph.py
+from langgraph.graph import StateGraph, END
+from langgraph.checkpoint.memory import MemorySaver
+from agent.state import JobState
+from agent.nodes import (
+    interviewer_node, planner_node, executor_node, aggregator_node,
+    should_continue, should_continue_interview
+)
+
+
+def build_job_agent():
+    """构建并编译LangGraph状态图（带记忆，支持 interrupt 暂停/恢复）
+
+    流程：
+    planner → executor ⟲ (循环执行工具)
+                  ↓ (全部完成)
+            interviewer_node  ← 有JD+简历则模拟面试，否则跳过
+                  ⟲ (逐题问答，interrupt 暂停等用户回答)
+                  ↓ (面试结束)
+            aggregator → END
+    """
+    workflow = StateGraph(JobState)
+
+    workflow.add_node("planner", planner_node)
+    workflow.add_node("executor", executor_node)
+    workflow.add_node("aggregator", aggregator_node)
+    workflow.add_node("interviewer", interviewer_node)
+
+    workflow.set_entry_point("planner")
+    workflow.add_edge("planner", "executor")
+
+    workflow.add_conditional_edges(
+        "executor",
+        should_continue,
+        {
+            "continue": "executor",
+            "finish": "interviewer",
+            "error": END
+        }
+    )
+
+    workflow.add_conditional_edges(
+        "interviewer",
+        should_continue_interview,
+        {
+            "continue": "interviewer",
+            "finish": "aggregator",
+            "error": END
+        }
+    )
+
+    workflow.add_edge("aggregator", END)
+
+    # 关键：带 checkpointer 编译，interrupt() 才能正常工作
+    return workflow.compile(checkpointer=MemorySaver())

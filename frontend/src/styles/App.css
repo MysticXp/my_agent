@@ -1,0 +1,37 @@
+* { box-sizing: border-box; }
+body { margin: 0; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background: #f5f7fa; }
+.app-container { max-width: 900px; margin: 20px auto; padding: 0 20px; }
+.app-header { display: flex; align-items: center; justify-content: space-between; background: white; padding: 16px 24px; border-radius: 16px; box-shadow: 0 2px 8px rgba(0,0,0,0.05); }
+.app-header h1 { margin: 0; font-size: 1.8rem; }
+.reset-btn { background: #f0f0f0; border: none; padding: 8px 16px; border-radius: 20px; cursor: pointer; }
+.input-area { background: white; padding: 24px; border-radius: 16px; margin-top: 20px; box-shadow: 0 2px 8px rgba(0,0,0,0.05); }
+.input-group { margin-bottom: 16px; }
+.input-group label { display: block; font-weight: 600; margin-bottom: 4px; }
+.input-textarea { width: 100%; padding: 10px; border: 1px solid #ddd; border-radius: 8px; font-family: inherit; font-size: 14px; resize: vertical; }
+.input-text { flex: 1; padding: 10px; border: 1px solid #ddd; border-radius: 8px; font-size: 14px; }
+button { padding: 10px 24px; background: #007bff; color: white; border: none; border-radius: 8px; font-weight: 600; cursor: pointer; transition: background 0.2s; }
+button:disabled { opacity: 0.5; cursor: not-allowed; }
+button:hover:not(:disabled) { background: #0056b3; }
+
+.conversation-area { margin-top: 20px; }
+.conversation-log { background: white; padding: 16px; border-radius: 16px; max-height: 400px; overflow-y: auto; box-shadow: 0 2px 8px rgba(0,0,0,0.05); }
+.message { margin: 8px 0; display: flex; }
+.message.user { justify-content: flex-end; }
+.message.assistant { justify-content: flex-start; }
+.message.error { justify-content: center; color: red; }
+.message-content { max-width: 80%; padding: 10px 16px; border-radius: 18px; background: #f0f0f0; word-break: break-word; }
+.message.user .message-content { background: #007bff; color: white; }
+.message.assistant .message-content { background: #e9ecef; color: #1e293b; }
+.message.error .message-content { background: #f8d7da; color: #721c24; }
+
+.interview-panel { background: white; padding: 20px; border-radius: 16px; margin-top: 16px; box-shadow: 0 2px 8px rgba(0,0,0,0.05); }
+.question-box { background: #f8f9fa; padding: 16px; border-radius: 12px; border-left: 4px solid #007bff; }
+.report-panel { background: white; padding: 24px; border-radius: 16px; margin-top: 20px; box-shadow: 0 2px 8px rgba(0,0,0,0.05); }
+.report-content { line-height: 1.6; }
+.feedback-section { margin-top: 20px; padding-top: 20px; border-top: 1px solid #eee; }
+
+.status-badge { display: inline-block; padding: 4px 12px; border-radius: 20px; font-size: 0.8rem; font-weight: 600; }
+.status-idle { background: #e9ecef; color: #495057; }
+.status-interviewing { background: #fff3cd; color: #856404; }
+.status-finished { background: #d4edda; color: #155724; }
+.status-error { background: #f8d7da; color: #721c24; }
