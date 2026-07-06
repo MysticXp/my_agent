@@ -18,17 +18,20 @@ PLANNER_PROMPT = """
 {job_description}
 
 === 你可以调用的工具 ===
-1. optimize_resume(job_description): 针对给定的JD，优化用户简历（**核心工具**）
-2. generate_questions(job_title, company): 根据JD生成模拟面试题（**核心工具**）
+1. analyze_jd_resume_fit(job_description, resume_text): 深度对比JD与简历，输出契合度分析报告（**核心工具**）
+2. optimize_resume(job_description, resume_text): 针对给定的JD，优化用户简历（**核心工具**）
+3. generate_questions(job_title, company): 根据JD生成模拟面试题（**核心工具**）
 
 === 规划规则（请严格遵守） ===
-1. **优先级判断**：如果用户提供了 `job_description`（非空），你的计划中**必须包含** `optimize_resume` 和 `generate_questions`。
-2. 步骤最多不超过 4 步。
+1. **优先级判断**：如果用户提供了 `job_description`（非空），你的计划中**必须包含** `analyze_jd_resume_fit`（契合度分析）、`optimize_resume`（简历优化）和 `generate_questions`（模拟面试）。
+2. 步骤最多不超过 5 步。
+3. `analyze_jd_resume_fit` 必须作为第一步执行，先分析契合度再进行优化。
 
 === 输出格式（JSON数组） ===
 [
-    {{"step_id": 1, "action": "optimize_resume", "params": {{"job_description": "具体的JD文本"}}, "description": "深度匹配简历与JD"}},
-    {{"step_id": 2, "action": "generate_questions", "params": {{"job_title": "岗位名", "company": "公司名"}}, "description": "生成针对性面试题"}}
+    {{"step_id": 1, "action": "analyze_jd_resume_fit", "params": {{"job_description": "具体的JD文本", "resume_text": "简历全文"}}, "description": "JD-简历契合度分析"}},
+    {{"step_id": 2, "action": "optimize_resume", "params": {{"job_description": "具体的JD文本"}}, "description": "深度匹配简历与JD"}},
+    {{"step_id": 3, "action": "generate_questions", "params": {{"job_title": "岗位名", "company": "公司名"}}, "description": "生成针对性面试题"}}
 ]
 """
 
@@ -68,6 +71,9 @@ AGGREGATOR_PROMPT = """
 
 === 执行结果汇总 ===
 
+【JD-简历契合度分析】
+{fit_analysis}
+
 【简历优化建议】
 {resume_advice}
 
@@ -78,15 +84,18 @@ AGGREGATOR_PROMPT = """
 请按以下结构输出（使用 Markdown 格式）：
 
 ## 📋 1. 执行摘要
-（用 2-3 句话概括整体情况，语气积极）
+（用 2-3 句话概括整体情况，先总结契合度评分，语气积极）
 
-## ✍️ 2. 简历优化要点
+## 🔍 2. JD-简历契合度要点
+（提炼契合度分析中最关键的发现：匹配得分、核心优势、关键差距）
+
+## ✍️ 3. 简历优化要点
 （提炼最核心的 3 条修改建议，要具体可操作）
 
-## 🎯 3. 面试备战策略
+## 🎯 4. 面试备战策略
 （根据生成的面试题，给出答题思路和 STAR 原则提醒）
 
-## 🚀 4. 下一步行动计划
+## 🚀 5. 下一步行动计划
 （给用户 3 条具体的行动建议，如修改简历、投递渠道、跟进策略）
 
 要求：

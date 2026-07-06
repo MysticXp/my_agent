@@ -6,7 +6,8 @@ from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
-from typing import Optional, List
+from typing import Optional, List, Dict
+from tools.jd_resume_analyzer import extract_match_score
 
 # 从你的agent文件夹导入我们之前写好的核心函数
 from agent.graph import build_job_agent
@@ -90,12 +91,19 @@ async def chat(request: ChatRequest):
             return JSONResponse(content=resp)
         else:
             # 面试结束或无需面试
+            # 提取契合度评分数据
+            fit_analysis_text = final_state.get("jd_resume_analysis") or ""
+            fit_scores = extract_match_score(fit_analysis_text) if fit_analysis_text else None
+
             resp = {
                 "status": "finished",
                 "output": final_state.get("final_output") or "分析完成",
-                "feedback": final_state.get("interview_feedback") or []
+                "feedback": final_state.get("interview_feedback") or [],
+                "fit_analysis": fit_analysis_text,
+                "fit_scores": fit_scores
             }
-            print(f"[Main] 返回 finished: output 长度={len(resp['output'])}")
+            print(f"[Main] 返回 finished: output 长度={len(resp['output'])}, "
+                  f"fit_scores={fit_scores.get('total_score') if fit_scores else 'N/A'}")
             return JSONResponse(content=resp)
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Agent执行出错: {str(e)}")

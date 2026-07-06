@@ -3,6 +3,7 @@ import { useAgent } from '../hooks/useAgent';
 import ChatInput from './ChatInput';
 import InterviewPanel from './InterviewPanel';
 import Report from './Report';
+import FitAnalysis from './FitAnalysis';
 import StatusBadge from './StatusBadge';
 import '../styles/App.css';
 
@@ -14,6 +15,8 @@ function App() {
     questionNum,
     totalQuestions,
     report,
+    fitScores,
+    fitAnalysis,
     loading,
     submit,
     reset,
@@ -108,9 +111,12 @@ function App() {
               />
             )}
 
-            {/* 面试结束：显示报告 */}
-            {status === 'finished' && report && (
-              <Report report={report} />
+            {/* 面试结束：显示契合度分析 + 报告 */}
+            {status === 'finished' && (
+              <>
+                <FitAnalysis scores={fitScores} analysis={fitAnalysis} />
+                {report && <Report report={report} />}
+              </>
             )}
           </div>
         )}

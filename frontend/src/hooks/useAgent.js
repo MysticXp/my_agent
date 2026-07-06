@@ -8,6 +8,8 @@ export const useAgent = () => {
   const [questionNum, setQuestionNum] = useState(0);
   const [totalQuestions, setTotalQuestions] = useState(0);
   const [report, setReport] = useState(null);
+  const [fitScores, setFitScores] = useState(null);
+  const [fitAnalysis, setFitAnalysis] = useState(null);
   const [loading, setLoading] = useState(false);
 
   // 启动面试或提交答案
@@ -36,6 +38,13 @@ export const useAgent = () => {
         // 面试完成，获取报告
         setStatus('finished');
         setReport(data);
+        // 保存契合度分析数据
+        if (data.fit_scores) {
+          setFitScores(data.fit_scores);
+        }
+        if (data.fit_analysis) {
+          setFitAnalysis(data.fit_analysis);
+        }
         // 添加反馈到对话
         if (data.feedback) {
           data.feedback.forEach(f => {
@@ -66,6 +75,8 @@ export const useAgent = () => {
     setQuestionNum(0);
     setTotalQuestions(0);
     setReport(null);
+    setFitScores(null);
+    setFitAnalysis(null);
     setLoading(false);
   }, []);
 
@@ -76,6 +87,8 @@ export const useAgent = () => {
     questionNum,
     totalQuestions,
     report,
+    fitScores,
+    fitAnalysis,
     loading,
     submit,
     reset,

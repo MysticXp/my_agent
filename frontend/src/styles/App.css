@@ -35,3 +35,7 @@ button:hover:not(:disabled) { background: #0056b3; }
 .status-interviewing { background: #fff3cd; color: #856404; }
 .status-finished { background: #d4edda; color: #155724; }
 .status-error { background: #f8d7da; color: #721c24; }
+
+.fit-analysis-panel { margin-top: 16px; }
+.fit-score-card { transition: all 0.3s ease; }
+.fit-score-card:hover { box-shadow: 0 4px 20px rgba(0,0,0,0.12); transform: translateY(-1px); }

@@ -23,6 +23,7 @@ from agent.prompts import (
 # 导入所有工具函数
 from tools.resume_optimizer import optimize_resume, extract_skills_from_resume
 from tools.interview import generate_interview_questions
+from tools.jd_resume_analyzer import analyze_jd_resume_fit, extract_match_score
 
 # =========================================================
 # 1. 初始化 LLM（配置 DeepSeek）
@@ -108,7 +109,20 @@ def executor_node(state: JobState) -> JobState:
     error = None
 
     try:
-        if action == "optimize_resume":
+        if action == "analyze_jd_resume_fit":
+            jd = params.get("job_description") or state.get("job_description")
+            resume = params.get("resume_text") or state.get("resume_text")
+
+            if resume and jd:
+                result = analyze_jd_resume_fit(
+                    job_description=jd,
+                    resume_text=resume
+                )
+                state["jd_resume_analysis"] = result
+            else:
+                result = "请提供简历文本和目标岗位描述（JD），以便生成契合度分析报告。"
+
+        elif action == "optimize_resume":
             jd = params.get("job_description") or state.get("job_description")
             if not jd and state.get("jobs"):
                 jd = state["jobs"][0].get("description", "")
@@ -165,12 +179,17 @@ def aggregator_node(state: JobState) -> JobState:
     if not interview_str or interview_str == "[]":
         interview_str = "（未生成面试题）"
 
+    fit_analysis = state.get("jd_resume_analysis")
+    if not fit_analysis:
+        fit_analysis = "（未生成契合度分析，请上传简历和JD）"
+
     resume_advice = state.get("resume_advice")
     if not resume_advice:
         resume_advice = "（未生成简历建议，请上传简历或提供更多信息）"
 
     prompt_text = AGGREGATOR_PROMPT.format(
         user_input=state["user_input"],
+        fit_analysis=fit_analysis,
         resume_advice=resume_advice,
         interview_questions=interview_str,
     )

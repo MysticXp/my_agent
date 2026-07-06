@@ -54,6 +54,9 @@ class JobState(TypedDict):
     """最大允许执行步数，防止死循环（面试常问！）"""
     
     # ---------- 执行结果 ----------
+    jd_resume_analysis: Optional[str]
+    """JD与简历契合度分析报告（由 analyze_jd_resume_fit 工具生成）"""
+
     resume_advice: Optional[str]
     """简历优化建议文本（由 optimize_resume 工具生成）"""
     
@@ -133,6 +136,7 @@ def create_initial_state(
         max_steps=5,  # 最多执行5步，防止死循环
         
         # 结果存储
+        jd_resume_analysis=None,
         resume_advice=None,
         interview_questions=[],
         current_q_index=0,
