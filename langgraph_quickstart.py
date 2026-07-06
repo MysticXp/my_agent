@@ -1,18 +1,21 @@
 """
-Day 2：LangGraph create_react_agent 上手实战
-对比 Day 1 手写 ReAct（你的 180 行 → 这里不到 30 行）
+Day 2：LangChain create_agent 上手实战（2026 新版 API）
+替代已弃用的 create_react_agent
+
+对比 Day 1 手写 ReAct（180 行 → 这里不到 30 行）
 """
 
 from langchain_deepseek import ChatDeepSeek
 from langchain_core.tools import tool
-from langgraph.prebuilt import create_react_agent
+from langchain.agents import create_agent
 import os
 from dotenv import load_dotenv
 
+load_dotenv()
 # ============================================================
 # 1. 定义工具（和 Day 1 一样，只是用 @tool 装饰器）
 # ============================================================
-load_dotenv()
+
 @tool
 def get_weather(city: str) -> str:
     """获取指定城市的当前天气"""
@@ -29,7 +32,6 @@ def get_weather(city: str) -> str:
 def calculator(expression: str) -> str:
     """计算数学表达式，如 '1234 * 5678'"""
     try:
-        # 安全起见，只允许数字和运算符
         allowed = set("0123456789+-*/.() ")
         if not all(c in allowed for c in expression):
             return "表达式包含非法字符"
@@ -41,19 +43,20 @@ def calculator(expression: str) -> str:
 
 # ============================================================
 # 2. 一行创建 Agent（对比 Day 1 ~180 行）
+#    create_agent 是 LangChain 1.0 的新标准 API，
+#    底层跑在 LangGraph 上，自带 middleware 系统。
 # ============================================================
 
 llm = ChatDeepSeek(
-    model="deepseek-v4-flash",  # 换成你用的模型，如 gpt-4o-mini / deepseek / qwen
+    model="deepseek-chat",  # 换成你用的模型
     temperature=0,
-    api_key=os.getenv("DEEPSEEK_API_KEY"),  # 或直接填 key
-    base_url=os.getenv("DEEPSEEK_BASE_URL")
+    api_key=os.getenv("DEEPSEEK_API_KEY"),
 )
 
-agent = create_react_agent(
+agent = create_agent(
     model=llm,
     tools=[get_weather, calculator],
-    prompt="你是一个智能助手。调用工具获取信息后，用中文给出简洁自然的回答。",
+    system_prompt="你是一个智能助手。调用工具获取信息后，用中文给出简洁自然的回答。",
 )
 
 # ============================================================
@@ -72,7 +75,7 @@ print(f"Agent：{result['messages'][-1].content}")
 print()
 
 # ============================================================
-# 4. 多步任务（对比 Day 1 max_iterations 的效果）
+# 4. 多步任务
 # ============================================================
 
 print("=" * 50)
@@ -107,13 +110,17 @@ for chunk in agent.stream(
     print()
 
 print("=" * 50)
-print("对比 Day 1 手写版")
+print("进化路线一览")
 print("=" * 50)
 print("""
-Day 1 手写版（~180行）:                    LangGraph（~30行）:
-  while 循环 + 手动控制迭代              create_react_agent 一行创建
-  文本解析 + 正则提取 Action              bind_tools 原生结构化输出
-  手动拼接 scratchpad                     自动管理 messages 状态
-  无 Checkpoint, 崩了重来                 支持 Checkpoint / Human-in-the-loop
-  max_iterations 暴力截断                 条件边精确控制流程
+AgentExecutor（已弃用）     ← while 循环封装版
+     ↓
+create_react_agent（已弃用） ← LangGraph 预构建版
+     ↓
+create_agent（当前标准）    ← LangChain 1.0 + LangGraph 底层 + middleware
+
+关键区别：
+- create_agent 底层就是 LangGraph 状态机
+- 自带 middleware 系统（before_model / after_model / wrap_tool_call）
+- 支持 checkpointer、thread_id、response_format
 """)

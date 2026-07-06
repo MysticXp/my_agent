@@ -74,21 +74,37 @@ async def chat(request: ChatRequest):
             )
             final_state = agent.invoke(state, config=config)
 
-        # 2. 检查是否有中断（模拟面试等待回答）
+        # 2. 检查是否有中断（契度审查 or 模拟面试等待回答）
         interrupt_list = final_state.get("__interrupt__")
         if interrupt_list:
-            # 面试进行中：从 __interrupt__ 中提取题目信息
             interrupt_obj = interrupt_list[0]
             intr_value = interrupt_obj.value
-            resp = {
-                "status": "interviewing",
-                "question": intr_value["question"],
-                "question_num": intr_value["question_num"],
-                "total": intr_value["total"],
-                "output": ""
-            }
-            print(f"[Main] 返回 interviewing: question_num={resp['question_num']}, total={resp['total']}")
-            return JSONResponse(content=resp)
+            intr_type = intr_value.get("type", "")
+
+            if intr_type == "fit_review":
+                # 契合度审查暂停：返回分析结果 + 评分，等待用户决定是否继续面试
+                fit_text = intr_value.get("fit_analysis", "")
+                resp = {
+                    "status": "fit_review",
+                    "fit_analysis": fit_text,
+                    "fit_scores": extract_match_score(fit_text) if fit_text else None,
+                    "question": intr_value.get("question", ""),
+                    "options": intr_value.get("options", []),
+                    "output": ""
+                }
+                print(f"[Main] 返回 fit_review: 等待用户决定是否继续面试")
+                return JSONResponse(content=resp)
+            else:
+                # 面试进行中：从 __interrupt__ 中提取题目信息
+                resp = {
+                    "status": "interviewing",
+                    "question": intr_value["question"],
+                    "question_num": intr_value["question_num"],
+                    "total": intr_value["total"],
+                    "output": ""
+                }
+                print(f"[Main] 返回 interviewing: question_num={resp['question_num']}, total={resp['total']}")
+                return JSONResponse(content=resp)
         else:
             # 面试结束或无需面试
             # 提取契合度评分数据

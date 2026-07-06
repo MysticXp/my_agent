@@ -5,6 +5,7 @@ const STATUS_MAP = {
   planning: { label: '规划中', color: '#3b82f6' },
   executing: { label: '执行中', color: '#f59e0b' },
   interviewing: { label: '面试中', color: '#8b5cf6' },
+  fit_review: { label: '审查中', color: '#0ea5e9' },
   finished: { label: '已完成', color: '#10b981' },
   error: { label: '异常', color: '#ef4444' },
 };

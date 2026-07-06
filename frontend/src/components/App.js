@@ -4,6 +4,7 @@ import ChatInput from './ChatInput';
 import InterviewPanel from './InterviewPanel';
 import Report from './Report';
 import FitAnalysis from './FitAnalysis';
+import FitReviewPanel from './FitReviewPanel';
 import StatusBadge from './StatusBadge';
 import '../styles/App.css';
 
@@ -19,6 +20,7 @@ function App() {
     fitAnalysis,
     loading,
     submit,
+    decideInterview,
     reset,
   } = useAgent();
 
@@ -86,7 +88,7 @@ function App() {
         )}
 
         {/* 对话/面试区 */}
-        {(status === 'interviewing' || status === 'finished') && (
+        {(status === 'fit_review' || status === 'interviewing' || status === 'finished') && (
           <div className="conversation-area">
             <div className="conversation-log">
               {conversation.map((msg, idx) => (
@@ -99,6 +101,16 @@ function App() {
               ))}
               {loading && <div className="message assistant"><div className="message-content">⏳ 思考中...</div></div>}
             </div>
+
+            {/* 契合度审查：等用户决定是否继续 */}
+            {status === 'fit_review' && (
+              <FitReviewPanel
+                fitScores={fitScores}
+                fitAnalysis={fitAnalysis}
+                onDecide={decideInterview}
+                loading={loading}
+              />
+            )}
 
             {/* 面试进行中：显示当前题目和输入框 */}
             {status === 'interviewing' && currentQuestion && (

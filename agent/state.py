@@ -68,13 +68,15 @@ class JobState(TypedDict):
     interview_feedback: List[str]       # 每道题的反馈记录
     interview_complete: bool            # 是否所有题目都问完了
     pending_question: Optional[str]     # 当前正在等待回答的问题
-    
+    skip_interview: bool                # 用户是否选择跳过模拟面试
+
     # ---------- 控制流 ----------
     status: str
     """
     当前状态机的状态：
     - "planning": 规划阶段
     - "executing": 执行阶段
+    - "fit_review": 契合度审查阶段（等待用户决定是否继续面试）
     - "finished": 已完成所有步骤
     - "error": 发生错误
     """
@@ -143,6 +145,7 @@ def create_initial_state(
         interview_feedback=[],
         interview_complete=False,
         pending_question=None,
+        skip_interview=False,
         
         # 控制流
         status="planning",   # 初始状态为 planning

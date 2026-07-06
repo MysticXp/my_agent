@@ -27,7 +27,17 @@ export const useAgent = () => {
 
       const data = await sendMessage(payload);
 
-      if (data.status === 'interviewing') {
+      if (data.status === 'fit_review') {
+        // 契合度审查暂停：等待用户决定是否继续面试
+        setStatus('fit_review');
+        if (data.fit_analysis) {
+          setFitAnalysis(data.fit_analysis);
+        }
+        if (data.fit_scores) {
+          setFitScores(data.fit_scores);
+        }
+        setConversation(prev => [...prev, { role: 'assistant', content: data.question || '契合度分析已完成，是否继续模拟面试？' }]);
+      } else if (data.status === 'interviewing') {
         // 面试进行中
         setStatus('interviewing');
         setCurrentQuestion(data.question);
@@ -67,6 +77,42 @@ export const useAgent = () => {
     }
   }, []);
 
+  // 契合度审查：用户决定是否继续面试
+  const decideInterview = useCallback(async (decision) => {
+    setLoading(true);
+    try {
+      setConversation(prev => [...prev, { role: 'user', content: decision === 'continue' ? '继续面试' : '跳过面试' }]);
+      const data = await sendMessage({ answer: decision });
+
+      if (data.status === 'interviewing') {
+        setStatus('interviewing');
+        setCurrentQuestion(data.question);
+        setQuestionNum(data.question_num);
+        setTotalQuestions(data.total);
+        setConversation(prev => [...prev, { role: 'assistant', content: `Q${data.question_num}: ${data.question}` }]);
+      } else if (data.status === 'finished') {
+        setStatus('finished');
+        setReport(data);
+        if (data.fit_scores) setFitScores(data.fit_scores);
+        if (data.fit_analysis) setFitAnalysis(data.fit_analysis);
+        if (data.feedback) {
+          data.feedback.forEach(f => {
+            setConversation(prev => [...prev, { role: 'assistant', content: f }]);
+          });
+        }
+        if (data.output) {
+          setConversation(prev => [...prev, { role: 'assistant', content: data.output }]);
+        }
+        setCurrentQuestion(null);
+      }
+    } catch (error) {
+      setStatus('error');
+      setConversation(prev => [...prev, { role: 'error', content: error.message || '网络错误' }]);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
   // 重置状态
   const reset = useCallback(() => {
     setStatus('idle');
@@ -91,6 +137,7 @@ export const useAgent = () => {
     fitAnalysis,
     loading,
     submit,
+    decideInterview,
     reset,
   };
 };

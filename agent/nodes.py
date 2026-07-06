@@ -207,7 +207,46 @@ def aggregator_node(state: JobState) -> JobState:
     return state
 
 # =========================================================
-# 5. 面试官节点（Interviewer Node）
+# 5. 契合度审查节点（Fit Review Node）—— 暂停，等用户决定是否继续面试
+# =========================================================
+def fit_review_node(state: JobState) -> JobState:
+    """契合度审查节点：展示匹配分析结果，让用户决定是否继续模拟面试"""
+    has_jd = bool(state.get("job_description"))
+    has_resume = bool(state.get("resume_text"))
+
+    # 如果没有 JD 或简历，直接跳过（无需审查）
+    if not has_jd or not has_resume:
+        print("[FitReview] 缺少 JD 或简历，跳过审查直接进入面试")
+        state["skip_interview"] = True  # 没数据，面试也会跳过
+        return state
+
+    fit_analysis = state.get("jd_resume_analysis", "")
+    if not fit_analysis:
+        print("[FitReview] 无契合度分析结果，直接进入面试")
+        return state
+
+    # 暂停，让用户查看契合度分析并决定是否继续面试
+    print("[FitReview] 暂停执行，等待用户决定是否继续面试...")
+    user_decision = interrupt({
+        "type": "fit_review",
+        "fit_analysis": fit_analysis,
+        "question": "契合度分析已完成，是否继续进行模拟面试？",
+        "options": ["continue", "skip"]
+    })
+
+    # 解析用户决策
+    if user_decision and str(user_decision).lower() in ("skip", "no", "跳过", "不", "n"):
+        state["skip_interview"] = True
+        print("[FitReview] 用户选择跳过面试")
+    else:
+        state["skip_interview"] = False
+        print("[FitReview] 用户选择继续面试")
+
+    return state
+
+
+# =========================================================
+# 6. 面试官节点（Interviewer Node）
 # =========================================================
 def interviewer_node(state: JobState) -> JobState:
     """面试官节点：支持中断等待用户回答"""
@@ -217,8 +256,8 @@ def interviewer_node(state: JobState) -> JobState:
     print(f"[Interviewer] JD={has_jd} (len={len(state.get('job_description') or '')}), "
           f"resume={has_resume} (len={len(state.get('resume_text') or '')})")
 
-    if not has_jd or not has_resume:
-        print("[Interviewer] 缺少 JD 或简历，跳过模拟面试")
+    if not has_jd or not has_resume or state.get("skip_interview"):
+        print("[Interviewer] 缺少 JD/简历 或 用户选择跳过，跳过模拟面试")
         state["interview_complete"] = True
         return state
 
@@ -279,8 +318,19 @@ def interviewer_node(state: JobState) -> JobState:
     return state
 
 # =========================================================
-# 6. 条件判断函数（Conditional Edge）
+# 7. 条件判断函数（Conditional Edge）
 # =========================================================
+def should_continue_from_fit_review(state: JobState) -> str:
+    """契合度审查后：用户选择跳过面试 → aggregator，否则 → interviewer"""
+    if state.get("error"):
+        return "error"
+    if state.get("skip_interview"):
+        print("[Router] 用户跳过面试，直接进入汇总")
+        return "finish"  # 跳到 aggregator
+    print("[Router] 用户继续面试，进入面试节点")
+    return "continue"  # 进入 interviewer
+
+
 def should_continue(state: JobState) -> str:
     """决定执行器的下一步"""
     if state.get("error"):
