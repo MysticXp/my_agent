@@ -18,5 +18,22 @@ export const sendMessage = async (payload) => {
   }
 };
 
+// 上传 PDF 简历并返回解析文本
+export const uploadResume = async (file) => {
+  try {
+    const formData = new FormData();
+    formData.append('file', file);
+
+    const response = await client.post('/upload-resume', formData, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+      timeout: 30000,  // 30s 超时，大文件需要更长时间
+    });
+    return response.data;
+  } catch (error) {
+    console.error('Upload Error:', error);
+    throw error.response?.data || error.message;
+  }
+};
+
 // 健康检查（可选）
 export const healthCheck = () => client.get('/health');

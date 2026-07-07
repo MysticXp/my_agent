@@ -2,12 +2,13 @@
 # 这是整个求职Agent的后端启动文件
 
 import os
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, UploadFile, File
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel
 from typing import Optional, List, Dict
 from tools.jd_resume_analyzer import extract_match_score
+from tools.pdf_parser import parse_pdf_to_text, get_pdf_metadata
 
 # 从你的agent文件夹导入我们之前写好的核心函数
 from agent.graph import build_job_agent
@@ -123,6 +124,49 @@ async def chat(request: ChatRequest):
             return JSONResponse(content=resp)
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Agent执行出错: {str(e)}")
+
+@app.post("/upload-resume")
+async def upload_resume(file: UploadFile = File(...)):
+    """
+    PDF 简历上传解析接口。
+    接收一个 PDF 文件，提取文本内容并返回。
+    """
+    # 校验文件类型
+    if not file.filename or not file.filename.lower().endswith('.pdf'):
+        raise HTTPException(
+            status_code=400,
+            detail="仅支持 PDF 文件，请上传 .pdf 格式的简历"
+        )
+
+    # 校验文件大小 (10MB 上限)
+    content = await file.read()
+    if len(content) > 10 * 1024 * 1024:
+        raise HTTPException(
+            status_code=400,
+            detail="文件大小超过 10MB 限制，请压缩后重新上传"
+        )
+    if len(content) == 0:
+        raise HTTPException(status_code=400, detail="文件内容为空")
+
+    try:
+        # 解析 PDF
+        text = parse_pdf_to_text(content, file.filename)
+        meta = get_pdf_metadata(content)
+
+        print(f"[Upload] 解析成功: {file.filename}, {meta['pages']}页, {len(text)}字符")
+        return JSONResponse(content={
+            "status": "ok",
+            "filename": file.filename,
+            "pages": meta["pages"],
+            "text": text,
+            "char_count": len(text),
+        })
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e))
+    except Exception as e:
+        print(f"[Upload] 解析失败: {e}")
+        raise HTTPException(status_code=500, detail=f"PDF解析失败: {str(e)}")
+
 
 @app.get("/")
 async def root():
