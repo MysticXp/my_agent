@@ -22,7 +22,8 @@ def generate_interview_questions(
     company: str,
     skills: list,
     jd_text: str = "",
-    resume_text: str = ""
+    resume_text: str = "",
+    avoid_context: str = ""
 ) -> list:
     """
     根据 JD 和候选人背景，生成定制化模拟面试题。
@@ -33,6 +34,7 @@ def generate_interview_questions(
         skills: 候选人技能列表
         jd_text: 岗位描述全文（用于生成针对性问题）
         resume_text: 候选人简历（用于生成个性化问题）
+        avoid_context: 历史题目避重上下文（列出已出过的题，要求LLM不要重复）
 
     返回:
         面试题字符串列表，共5道（2技术 + 1系统设计 + 2行为）
@@ -45,6 +47,11 @@ def generate_interview_questions(
 
     skills_str = ", ".join(skills) if skills else "未提取到技能"
 
+    # 避重上下文
+    avoid_section = ""
+    if avoid_context:
+        avoid_section = f"\n=== 历史已出题目（请务必避开，不要重复！） ===\n{avoid_context}\n"
+
     prompt = f"""你是{company}的资深技术面试官，正在为候选人准备一场模拟面试。
 
 === 目标岗位 JD ===
@@ -55,9 +62,9 @@ def generate_interview_questions(
 
 === 候选人技能 ===
 {skills_str}
-
+{avoid_section}
 === 出题要求 ===
-请生成5道面试题，并按下面格式严格输出：
+请生成5道面试题，并按下面格式严格输出。
 
 **第1题 - 技术深度**
 - 考察候选人最核心的技术栈（从JD中提取最关键的技术要求）

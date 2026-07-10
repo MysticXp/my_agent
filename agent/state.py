@@ -22,7 +22,13 @@ class JobState(TypedDict):
     
     job_description: Optional[str]
     """用户直接粘贴的职位描述（JD），优先级最高"""
-    
+
+    company: Optional[str]
+    """用户输入的公司名称，如'字节跳动'"""
+
+    role: Optional[str]
+    """用户输入的岗位名称，如'高级前端开发工程师'"""
+
     user_skills: List[str]
     """从简历中提取的技能列表，如 ['React', 'Python', '项目管理']"""
     
@@ -53,6 +59,16 @@ class JobState(TypedDict):
     max_steps: int
     """最大允许执行步数，防止死循环（面试常问！）"""
     
+    # ---------- RAG 检索结果 ----------
+    similar_jds: List[Dict[str, Any]]
+    """检索到的历史相似JD列表"""
+
+    rag_context: str
+    """注入 Prompt 的 RAG 上下文文本"""
+
+    similar_questions: List[Dict[str, Any]]
+    """检索到的历史相似面试题列表"""
+
     # ---------- 执行结果 ----------
     jd_resume_analysis: Optional[str]
     """JD与简历契合度分析报告（由 analyze_jd_resume_fit 工具生成）"""
@@ -109,9 +125,11 @@ class JobState(TypedDict):
 # 2. 状态初始化工具函数
 # =====================================================
 def create_initial_state(
-    user_input: str, 
+    user_input: str,
     resume: Optional[str] = None,
-    job_description: Optional[str] = None
+    job_description: Optional[str] = None,
+    company: Optional[str] = None,
+    role: Optional[str] = None,
 ) -> JobState:
     """
     创建一个干净的初始状态，用于每次新对话的开始。
@@ -128,6 +146,8 @@ def create_initial_state(
         user_input=user_input,
         resume_text=resume,
         job_description=job_description,
+        company=company,
+        role=role,
         user_skills=[],
         target_role="",
         target_location="",
@@ -147,6 +167,11 @@ def create_initial_state(
         pending_question=None,
         skip_interview=False,
         
+        # RAG
+        similar_jds=[],
+        rag_context="",
+        similar_questions=[],
+
         # 控制流
         status="planning",   # 初始状态为 planning
         error=None,

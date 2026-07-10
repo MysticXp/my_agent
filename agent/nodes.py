@@ -24,6 +24,9 @@ from agent.prompts import (
 from tools.resume_optimizer import optimize_resume, extract_skills_from_resume
 from tools.interview import generate_interview_questions
 from tools.jd_resume_analyzer import analyze_jd_resume_fit, extract_match_score
+from tools.jd_retriever import search_similar_jds, build_rag_context
+from tools.jd_store import save_jd as save_jd_to_store
+from tools.question_store import save_questions, get_questions, build_avoid_context
 
 # =========================================================
 # 1. 初始化 LLM（配置 DeepSeek）
@@ -42,18 +45,69 @@ def get_llm(temperature: float = 0.3):
 # 2. 规划节点（Planner Node）
 # =========================================================
 def planner_node(state: JobState) -> JobState:
-    """规划阶段：解析用户需求，生成执行计划"""
+    """规划阶段：RAG检索相似JD + 解析用户需求，生成执行计划"""
     print("[Planner] 正在分析用户需求并制定计划...")
 
     llm = get_llm(temperature=0.1)
+
+    # RAG: 检索历史相似 JD（优先用 JD 文本，没有 JD 则用简历文本）
+    rag_context = ""
+    rag_query = state.get("job_description") or state.get("resume_text") or ""
+    if rag_query.strip():
+        try:
+            similar = search_similar_jds(rag_query, top_k=3)
+            state["similar_jds"] = similar
+            rag_context = build_rag_context(similar)
+            state["rag_context"] = rag_context
+            print(f"[Planner] RAG检索到 {len(similar)} 条相似JD (query来源={'JD' if state.get('job_description') else '简历'})")
+        except Exception as e:
+            print(f"[Planner] RAG检索失败（非致命）: {e}")
+            state["similar_jds"] = []
+            state["rag_context"] = ""
+
+    # 检索历史面试题（按岗位/公司精确匹配，无需向量检索）
+    similar_questions = []
+    question_context = ""
+    role = state.get("role") or ""
+    company = state.get("company") or ""
+    if role:
+        try:
+            similar_questions = get_questions(role=role, company=company)
+            state["similar_questions"] = similar_questions
+            if similar_questions:
+                question_context = build_avoid_context(role=role, company=company)
+            print(f"[Planner] 历史面试题检索: 岗位={role}, 共 {len(similar_questions)} 道")
+        except Exception as e:
+            print(f"[Planner] 面试题检索失败（非致命）: {e}")
+            state["similar_questions"] = []
+
+    # 构建 JD 上下文（没有 JD 但有 RAG 结果时，引导 LLM 使用历史 JD）
     jd_text = state.get("job_description", "")
     if not jd_text:
-        jd_text = "用户未提供具体JD，请询问。"
+        if rag_context:
+            jd_text = f"用户未提供具体JD，但向量库检索到以下相似历史JD可供参考：\n{rag_context}\n请基于最匹配的历史JD为用户提供分析建议。"
+        else:
+            jd_text = "用户未提供具体JD，请询问。"
+    if rag_query.strip():
+        try:
+            similar = search_similar_jds(rag_query, top_k=3)
+            state["similar_jds"] = similar
+            rag_context = build_rag_context(similar)
+            state["rag_context"] = rag_context
+            print(f"[Planner] RAG检索到 {len(similar)} 条相似JD (query来源={'JD' if state.get('job_description') else '简历'})")
+        except Exception as e:
+            print(f"[Planner] RAG检索失败（非致命）: {e}")
+            state["similar_jds"] = []
+            state["rag_context"] = ""
 
     prompt_text = PLANNER_PROMPT.format(
         user_input=state["user_input"],
         resume_text=state.get("resume_text", "用户未提供简历"),
-        job_description=jd_text
+        company=state.get("company") or "（未填写）",
+        role=state.get("role") or "（未填写）",
+        job_description=jd_text,
+        rag_context=rag_context or "（无历史JD记录）",
+        question_context=question_context or "（无历史面试题记录）",
     )
 
     try:
@@ -113,6 +167,13 @@ def executor_node(state: JobState) -> JobState:
             jd = params.get("job_description") or state.get("job_description")
             resume = params.get("resume_text") or state.get("resume_text")
 
+            # 如果用户没提供 JD，尝试从 RAG 检索结果中获取完整 JD
+            if (not jd or len(jd) < 50) and state.get("similar_jds"):
+                top_jd = state["similar_jds"][0]
+                jd = top_jd.get("jd_text", "")
+                if jd:
+                    print(f"[Executor] 使用RAG检索到的JD: {top_jd.get('company')} - {top_jd.get('role')}")
+
             if resume and jd:
                 result = analyze_jd_resume_fit(
                     job_description=jd,
@@ -138,14 +199,29 @@ def executor_node(state: JobState) -> JobState:
                 result = "请提供简历文本和目标岗位描述（JD），以便生成个性化优化建议。"
 
         elif action == "generate_questions":
+            role = params.get("job_title") or state.get("role") or state.get("target_role") or "开发工程师"
+            company = params.get("company") or state.get("company") or "目标公司"
+            avoid_ctx = build_avoid_context(role=role, company=company)
             result = generate_interview_questions(
-                job_title=params.get("job_title", state.get("target_role", "开发工程师")),
-                company=params.get("company", "目标公司"),
+                job_title=role,
+                company=company,
                 skills=state.get("user_skills", []),
                 jd_text=state.get("job_description", ""),
-                resume_text=state.get("resume_text", "")
+                resume_text=state.get("resume_text", ""),
+                avoid_context=avoid_ctx,
             )
             state["interview_questions"] = result
+            # 保存面试题到历史库（按岗位归类）
+            if result:
+                try:
+                    save_questions(
+                        role=state.get("role") or state.get("target_role") or "",
+                        questions=result,
+                        company=state.get("company") or "",
+                    )
+                    print(f"[Executor] {len(result)} 道面试题已保存到历史库")
+                except Exception as e:
+                    print(f"[Executor] 面试题保存失败（非致命）: {e}")
 
         else:
             error = f"未知工具: {action}"
@@ -190,6 +266,7 @@ def aggregator_node(state: JobState) -> JobState:
     prompt_text = AGGREGATOR_PROMPT.format(
         user_input=state["user_input"],
         fit_analysis=fit_analysis,
+        similar_jds_context=build_rag_context(state.get("similar_jds", [])),
         resume_advice=resume_advice,
         interview_questions=interview_str,
     )
@@ -199,6 +276,30 @@ def aggregator_node(state: JobState) -> JobState:
         state["final_output"] = response.content
         state["status"] = "finished"
         print(f"[Aggregator] 报告生成完成，长度={len(response.content)}")
+
+        # RAG: 自动保存 JD 到历史库
+        if state.get("job_description"):
+            try:
+                # 提取契合度评分（如有）
+                fit_text = state.get("jd_resume_analysis", "")
+                if fit_text:
+                    scores = extract_match_score(fit_text)
+                    fit_score = scores.get("total_score", 0)
+                else:
+                    fit_score = 0
+
+                save_jd_to_store(
+                    jd_text=state["job_description"],
+                    resume_text=state.get("resume_text", ""),
+                    fit_score=fit_score,
+                    company=state.get("company") or "",
+                    role=state.get("role") or "",
+                )
+                print("[Aggregator] JD已自动保存到历史库"
+                      + (f" (公司={state.get('company')}, 岗位={state.get('role')})" if state.get("company") or state.get("role") else ""))
+            except Exception as e:
+                print(f"[Aggregator] JD保存失败（非致命）: {e}")
+
     except Exception as e:
         print(f"[Aggregator] 生成报告失败: {e}")
         state["final_output"] = f"生成报告时出错: {str(e)}\n\n请检查网络或重试。"
@@ -230,6 +331,8 @@ def fit_review_node(state: JobState) -> JobState:
     user_decision = interrupt({
         "type": "fit_review",
         "fit_analysis": fit_analysis,
+        "similar_jds": state.get("similar_jds", []),
+        "similar_questions": state.get("similar_questions", []),
         "question": "契合度分析已完成，是否继续进行模拟面试？",
         "options": ["continue", "skip"]
     })
@@ -264,16 +367,31 @@ def interviewer_node(state: JobState) -> JobState:
     # 1. 生成面试题
     if not state.get("interview_questions"):
         print("[Interviewer] 正在生成面试题...")
+        role = state.get("role") or state.get("target_role") or "开发工程师"
+        company = state.get("company") or "目标公司"
+        avoid_ctx = build_avoid_context(role=role, company=company)
         questions = generate_interview_questions(
-            job_title=state.get("target_role") or "开发工程师",
-            company="目标公司",
+            job_title=role,
+            company=company,
             skills=state.get("user_skills", []),
             jd_text=state.get("job_description", ""),
-            resume_text=state.get("resume_text", "")
+            resume_text=state.get("resume_text", ""),
+            avoid_context=avoid_ctx,
         )
         state["interview_questions"] = questions
         state["current_q_index"] = 0
         print(f"[Interviewer] 生成 {len(questions)} 道题")
+        # 保存面试题到历史库（按岗位归类）
+        if questions:
+            try:
+                save_questions(
+                    role=state.get("role") or state.get("target_role") or "",
+                    questions=questions,
+                    company=state.get("company") or "",
+                )
+                print(f"[Interviewer] {len(questions)} 道面试题已保存到历史库")
+            except Exception as e:
+                print(f"[Interviewer] 面试题保存失败（非致命）: {e}")
 
     idx = state["current_q_index"]
     questions = state["interview_questions"]

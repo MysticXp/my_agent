@@ -14,8 +14,18 @@ PLANNER_PROMPT = """
 === 用户简历 ===
 {resume_text}
 
+=== 目标公司与岗位 ===
+公司: {company}
+岗位: {role}
+
 === 用户提供的目标职位描述（JD） ===
 {job_description}
+
+=== 历史相似JD参考（RAG检索结果） ===
+{rag_context}
+
+=== 历史相似面试题参考（向量检索） ===
+{question_context}
 
 === 你可以调用的工具 ===
 1. analyze_jd_resume_fit(job_description, resume_text): 深度对比JD与简历，输出契合度分析报告（**核心工具**）
@@ -23,7 +33,10 @@ PLANNER_PROMPT = """
 3. generate_questions(job_title, company): 根据JD生成模拟面试题（**核心工具**）
 
 === 规划规则（请严格遵守） ===
-1. **优先级判断**：如果用户提供了 `job_description`（非空），你的计划中**必须包含** `analyze_jd_resume_fit`（契合度分析）、`optimize_resume`（简历优化）和 `generate_questions`（模拟面试）。
+1. **优先级判断**：
+   - 如果用户提供了 `job_description`（非空），你的计划中**必须包含** `analyze_jd_resume_fit`（契合度分析）、`optimize_resume`（简历优化）和 `generate_questions`（模拟面试）。
+   - 如果用户**只提供了简历但没有JD**，但 RAG 检索到了相似历史 JD，你应该**选择最匹配的一条历史JD**，对其执行 `analyze_jd_resume_fit`，并在 description 中说明"基于历史JD"。
+   - 如果用户既没有简历也没有JD，则只规划 `generate_questions`（通用面试题）。
 2. 步骤最多不超过 5 步。
 3. `analyze_jd_resume_fit` 必须作为第一步执行，先分析契合度再进行优化。
 
@@ -74,6 +87,9 @@ AGGREGATOR_PROMPT = """
 【JD-简历契合度分析】
 {fit_analysis}
 
+【历史相似JD参考（向量检索）】
+{similar_jds_context}
+
 【简历优化建议】
 {resume_advice}
 
@@ -89,13 +105,16 @@ AGGREGATOR_PROMPT = """
 ## 🔍 2. JD-简历契合度要点
 （提炼契合度分析中最关键的发现：匹配得分、核心优势、关键差距）
 
-## ✍️ 3. 简历优化要点
+## 📚 3. 历史相似JD参考
+（如果提供了相似JD参考，简要提及最相关的1-2个历史JD及其公司名和职位，说明参考价值）
+
+## ✍️ 4. 简历优化要点
 （提炼最核心的 3 条修改建议，要具体可操作）
 
-## 🎯 4. 面试备战策略
+## 🎯 5. 面试备战策略
 （根据生成的面试题，给出答题思路和 STAR 原则提醒）
 
-## 🚀 5. 下一步行动计划
+## 🚀 6. 下一步行动计划
 （给用户 3 条具体的行动建议，如修改简历、投递渠道、跟进策略）
 
 要求：

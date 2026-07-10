@@ -10,6 +10,8 @@ export const useAgent = () => {
   const [report, setReport] = useState(null);
   const [fitScores, setFitScores] = useState(null);
   const [fitAnalysis, setFitAnalysis] = useState(null);
+  const [similarJds, setSimilarJds] = useState([]);
+  const [similarQuestions, setSimilarQuestions] = useState([]);
   const [loading, setLoading] = useState(false);
 
   // 启动面试或提交答案
@@ -30,12 +32,10 @@ export const useAgent = () => {
       if (data.status === 'fit_review') {
         // 契合度审查暂停：等待用户决定是否继续面试
         setStatus('fit_review');
-        if (data.fit_analysis) {
-          setFitAnalysis(data.fit_analysis);
-        }
-        if (data.fit_scores) {
-          setFitScores(data.fit_scores);
-        }
+        if (data.fit_analysis) setFitAnalysis(data.fit_analysis);
+        if (data.fit_scores) setFitScores(data.fit_scores);
+        if (data.similar_jds) setSimilarJds(data.similar_jds);
+        if (data.similar_questions) setSimilarQuestions(data.similar_questions);
         setConversation(prev => [...prev, { role: 'assistant', content: data.question || '契合度分析已完成，是否继续模拟面试？' }]);
       } else if (data.status === 'interviewing') {
         // 面试进行中
@@ -54,6 +54,12 @@ export const useAgent = () => {
         }
         if (data.fit_analysis) {
           setFitAnalysis(data.fit_analysis);
+        }
+        if (data.similar_jds) {
+          setSimilarJds(data.similar_jds);
+        }
+        if (data.similar_questions) {
+          setSimilarQuestions(data.similar_questions);
         }
         // 添加反馈到对话
         if (data.feedback) {
@@ -95,6 +101,8 @@ export const useAgent = () => {
         setReport(data);
         if (data.fit_scores) setFitScores(data.fit_scores);
         if (data.fit_analysis) setFitAnalysis(data.fit_analysis);
+        if (data.similar_jds) setSimilarJds(data.similar_jds);
+        if (data.similar_questions) setSimilarQuestions(data.similar_questions);
         if (data.feedback) {
           data.feedback.forEach(f => {
             setConversation(prev => [...prev, { role: 'assistant', content: f }]);
@@ -123,6 +131,8 @@ export const useAgent = () => {
     setReport(null);
     setFitScores(null);
     setFitAnalysis(null);
+    setSimilarJds([]);
+    setSimilarQuestions([]);
     setLoading(false);
   }, []);
 
@@ -135,6 +145,8 @@ export const useAgent = () => {
     report,
     fitScores,
     fitAnalysis,
+    similarJds,
+    similarQuestions,
     loading,
     submit,
     decideInterview,

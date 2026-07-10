@@ -18,6 +18,8 @@ function App() {
     report,
     fitScores,
     fitAnalysis,
+    similarJds,
+    similarQuestions,
     loading,
     submit,
     decideInterview,
@@ -25,6 +27,8 @@ function App() {
   } = useAgent();
 
   const [resume, setResume] = useState('5年Java经验，Spring Cloud，高并发项目经验');
+  const [company, setCompany] = useState('字节跳动');
+  const [role, setRole] = useState('高级前端开发工程师');
   const [jd, setJd] = useState(`岗位名称：高级前端开发工程师
 公司：字节跳动（ByteDance）
 地点：上海
@@ -48,13 +52,15 @@ function App() {
 
 薪资范围：35k-55k·15薪`);
 
-  // 处理用户首次提交（消息+简历+JD）
-  const handleInitialSubmit = (message) => {
+  // 处理用户首次提交（消息+简历+JD+公司+岗位）
+  const handleInitialSubmit = (message, companyName, roleName) => {
     if (!message.trim()) return;
     submit({
       message,
       resume,
       job_description: jd,
+      company: companyName || company,
+      role: roleName || role,
     });
   };
 
@@ -83,6 +89,10 @@ function App() {
             setResume={setResume}
             jd={jd}
             setJd={setJd}
+            company={company}
+            setCompany={setCompany}
+            role={role}
+            setRole={setRole}
             loading={loading}
           />
         )}
@@ -107,6 +117,8 @@ function App() {
               <FitReviewPanel
                 fitScores={fitScores}
                 fitAnalysis={fitAnalysis}
+                similarJds={similarJds}
+                similarQuestions={similarQuestions}
                 onDecide={decideInterview}
                 loading={loading}
               />

@@ -9,6 +9,9 @@ from pydantic import BaseModel
 from typing import Optional, List, Dict
 from tools.jd_resume_analyzer import extract_match_score
 from tools.pdf_parser import parse_pdf_to_text, get_pdf_metadata
+from tools.jd_store import get_all_jds, delete_jd
+from tools.vector_store import rematch_resume_against_jds, rebuild_index_from_history, get_index_stats
+from tools.question_store import get_questions as get_history_questions, get_all_roles, get_stats as get_question_stats
 
 # 从你的agent文件夹导入我们之前写好的核心函数
 from agent.graph import build_job_agent
@@ -37,6 +40,8 @@ class ChatRequest(BaseModel):
     message: str = ""                      # 首次请求必填，后续回答可选
     resume: Optional[str] = None           # 简历文本
     job_description: Optional[str] = None  # 岗位描述 (JD)
+    company: Optional[str] = None          # 公司名称
+    role: Optional[str] = None             # 岗位名称
     answer: Optional[str] = None           # 面试回答（恢复中断用）
     user_id: Optional[str] = "default"
 
@@ -72,6 +77,8 @@ async def chat(request: ChatRequest):
                 user_input=request.message,
                 resume=request.resume,
                 job_description=request.job_description,
+                company=request.company,
+                role=request.role,
             )
             final_state = agent.invoke(state, config=config)
 
@@ -85,15 +92,41 @@ async def chat(request: ChatRequest):
             if intr_type == "fit_review":
                 # 契合度审查暂停：返回分析结果 + 评分，等待用户决定是否继续面试
                 fit_text = intr_value.get("fit_analysis", "")
+                similar = intr_value.get("similar_jds", [])
+                similar_qs = intr_value.get("similar_questions", [])
+
+                # 构建带 JD 简讯的提示消息
+                question = intr_value.get("question", "契合度分析已完成，是否继续进行模拟面试？")
+                if similar:
+                    jd_lines = ["\n\n📚 **向量库匹配到的历史JD：**"]
+                    for jd in similar[:3]:
+                        company = jd.get("company", "?")
+                        role = jd.get("role", "?")
+                        score = jd.get("score", 0)
+                        reason = jd.get("similarity_reason", "")
+                        jd_lines.append(f"- **{company}** — {role}（相似度 {score}%）")
+                        if reason:
+                            jd_lines.append(f"  _{reason}_")
+                    question = question + "\n".join(jd_lines)
+                if similar_qs:
+                    q_lines = ["\n\n🎯 **历史面试题（同岗位）：**"]
+                    for q in similar_qs[:5]:
+                        c = q.get("company", "")
+                        tag = f" [{c}]" if c else ""
+                        q_lines.append(f"-{tag} {q.get('question', '')}")
+                    question = question + "\n".join(q_lines)
+
                 resp = {
                     "status": "fit_review",
                     "fit_analysis": fit_text,
                     "fit_scores": extract_match_score(fit_text) if fit_text else None,
-                    "question": intr_value.get("question", ""),
+                    "similar_jds": similar,
+                    "similar_questions": similar_qs,
+                    "question": question,
                     "options": intr_value.get("options", []),
                     "output": ""
                 }
-                print(f"[Main] 返回 fit_review: 等待用户决定是否继续面试")
+                print(f"[Main] 返回 fit_review: 等待用户决定是否继续面试 (similar_jds={len(similar)}, similar_qs={len(similar_qs)})")
                 return JSONResponse(content=resp)
             else:
                 # 面试进行中：从 __interrupt__ 中提取题目信息
@@ -117,7 +150,9 @@ async def chat(request: ChatRequest):
                 "output": final_state.get("final_output") or "分析完成",
                 "feedback": final_state.get("interview_feedback") or [],
                 "fit_analysis": fit_analysis_text,
-                "fit_scores": fit_scores
+                "fit_scores": fit_scores,
+                "similar_jds": final_state.get("similar_jds") or [],
+                "similar_questions": final_state.get("similar_questions") or [],
             }
             print(f"[Main] 返回 finished: output 长度={len(resp['output'])}, "
                   f"fit_scores={fit_scores.get('total_score') if fit_scores else 'N/A'}")
@@ -166,6 +201,97 @@ async def upload_resume(file: UploadFile = File(...)):
     except Exception as e:
         print(f"[Upload] 解析失败: {e}")
         raise HTTPException(status_code=500, detail=f"PDF解析失败: {str(e)}")
+
+
+@app.get("/jd-history")
+async def list_jd_history():
+    """获取所有历史 JD 列表（摘要，不含全文）"""
+    try:
+        jds = get_all_jds()
+        return JSONResponse(content={"status": "ok", "count": len(jds), "jds": jds})
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"获取JD历史失败: {str(e)}")
+
+
+@app.delete("/jd-history/{jd_id}")
+async def remove_jd(jd_id: str):
+    """删除指定的历史 JD（同时清理向量索引）"""
+    success = delete_jd(jd_id)
+    if success:
+        return JSONResponse(content={"status": "ok", "message": f"已删除 {jd_id}"})
+    raise HTTPException(status_code=404, detail=f"未找到 JD: {jd_id}")
+
+
+@app.post("/rematch")
+async def rematch_resume(request: ChatRequest):
+    """
+    重新匹配：用新的简历文本与所有历史 JD 做向量相似度计算，
+    返回按契合度排序的 JD 列表。
+    用于「简历更新后，看哪些 JD 匹配度提升了」的场景。
+    """
+    resume = request.resume or request.message
+    if not resume or len(resume) < 20:
+        raise HTTPException(status_code=400, detail="简历文本太短（至少20字符），请提供完整简历")
+
+    try:
+        results = rematch_resume_against_jds(resume, top_k=10)
+        stats = get_index_stats()
+        return JSONResponse(content={
+            "status": "ok",
+            "resume_length": len(resume),
+            "total_jds_in_index": stats["jd_count"],
+            "matches": results,
+        })
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"重新匹配失败: {str(e)}")
+
+
+@app.post("/rebuild-index")
+async def rebuild_index():
+    """从 jd_history.json 重建向量索引"""
+    try:
+        rebuild_index_from_history()
+        stats = get_index_stats()
+        return JSONResponse(content={
+            "status": "ok",
+            "message": f"索引重建完成: {stats['jd_count']} 条 JD",
+            **stats,
+        })
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"索引重建失败: {str(e)}")
+
+
+@app.get("/vector-stats")
+async def vector_stats():
+    """获取向量库统计信息"""
+    try:
+        stats = get_index_stats()
+        return JSONResponse(content={"status": "ok", **stats})
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"获取统计失败: {str(e)}")
+
+
+@app.get("/question-history")
+async def question_history(role: str = "", company: str = ""):
+    """获取历史面试题（可按岗位/公司筛选）"""
+    try:
+        if role:
+            questions = get_history_questions(role=role, company=company)
+            return JSONResponse(content={
+                "status": "ok",
+                "role": role,
+                "company": company,
+                "count": len(questions),
+                "questions": questions,
+            })
+        else:
+            # 返回按岗位分组的概览
+            return JSONResponse(content={
+                "status": "ok",
+                **get_question_stats(),
+            })
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"获取面试题历史失败: {str(e)}")
 
 
 @app.get("/")
