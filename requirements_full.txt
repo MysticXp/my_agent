@@ -1,4 +1,4 @@
-﻿# =========================================================
+# =========================================================
 # LangChain 核心框架
 # 作用：LangChain 1.x 主体、核心抽象、社区组件、实验性组件、文本切分器
 # =========================================================
@@ -173,9 +173,9 @@ torchvision>=0.16.0
 # 作用：PDF、Word、PPT、Excel、HTML、Markdown、图片文档等 Loader 支持
 # 注意：unstructured-inference 可能依赖本地推理环境，torch/torchvision 请单独安装
 # =========================================================
-unstructured>=0.18.1
-unstructured-client>=0.42.0
-unstructured-inference>=1.6.0
+unstructured>=0.17.0
+unstructured-client>=0.40.0
+unstructured-inference>=1.2.0
 unstructured.pytesseract>=0.3.15
 
 pdfminer.six>=20231228
