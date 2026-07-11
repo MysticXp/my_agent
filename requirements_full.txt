@@ -108,7 +108,7 @@ typer>=0.24.0
 click>=8.3.0
 tenacity>=9.1.4
 tqdm>=4.67.0
-python-dateutil>=2.9.0.post0
+python-dateutil>=2.9.0
 pytz>=2026.2
 
 
@@ -173,7 +173,7 @@ torchvision>=0.16.0
 # 作用：PDF、Word、PPT、Excel、HTML、Markdown、图片文档等 Loader 支持
 # 注意：unstructured-inference 可能依赖本地推理环境，torch/torchvision 请单独安装
 # =========================================================
-unstructured>=0.24.0
+unstructured>=0.18.1
 unstructured-client>=0.44.0
 unstructured-inference>=1.6.0
 unstructured.pytesseract>=0.3.15
