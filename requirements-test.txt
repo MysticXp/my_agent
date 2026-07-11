@@ -1,0 +1,11 @@
+# 测试依赖（精简版）— 只装运行测试必需的包
+# 不包含 torch/transformers/unstructured/opencv 等重依赖
+# 因为测试已经 mock 了所有 LLM 调用
+pytest>=7.0
+fastapi>=0.100.0
+httpx>=0.25.0
+langgraph>=1.0.0
+langchain-deepseek>=1.0.0
+python-dotenv>=1.0.0
+pydantic>=2.0.0
+tiktoken>=0.5.0
