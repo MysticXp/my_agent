@@ -84,5 +84,41 @@
     ],
     "fit_score": 68,
     "one_line": "负责AI Agent系统架构设计与开发，精通主流Agent框架和大模型推理范式，具备分布式系统开发能力的高级工程师。"
+  },
+  {
+    "id": "jd_20260710_160629_319884",
+    "indexed_at": "2026-07-10T16:06:29.463693",
+    "created_at": "2026-07-10T16:06:29.319884",
+    "company": "字节跳动",
+    "role": "高级前端开发工程师",
+    "level": "高级",
+    "tech_stack": [
+      "React",
+      "TypeScript",
+      "Webpack",
+      "Vite",
+      "Node.js",
+      "BFF"
+    ],
+    "fit_score": 0,
+    "one_line": "5年以上经验，精通React/TypeScript及前端工程化，负责中后台系统架构与性能优化，有团队指导经验者优先。"
+  },
+  {
+    "id": "jd_20260711_090635_873063",
+    "indexed_at": "2026-07-11T09:06:36.025525",
+    "created_at": "2026-07-11T09:06:35.873063",
+    "company": "字节跳动",
+    "role": "高级前端开发工程师",
+    "level": "高级",
+    "tech_stack": [
+      "React",
+      "TypeScript",
+      "Webpack",
+      "Vite",
+      "Node.js",
+      "BFF"
+    ],
+    "fit_score": 15,
+    "one_line": "5年以上经验，精通React和TypeScript，负责中后台系统前端架构与工程化建设，具备性能优化和团队指导能力。"
   }
 ]

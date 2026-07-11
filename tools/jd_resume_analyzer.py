@@ -18,13 +18,14 @@ def _get_llm(temperature: float = 0.2):
     )
 
 
-def analyze_jd_resume_fit(job_description: str, resume_text: str) -> str:
+def analyze_jd_resume_fit(job_description: str, resume_text: str, llm=None) -> str:
     """
     深度对比JD与候选人简历，输出契合度分析报告。
 
     参数:
         job_description: 目标岗位 JD 全文
         resume_text: 候选人简历全文
+        llm: 可选，外部 LLM 实例（用于 Multi-Agent 注入自己的 LLM）
 
     返回:
         Markdown 格式的契合度分析报告，包含：
@@ -33,7 +34,8 @@ def analyze_jd_resume_fit(job_description: str, resume_text: str) -> str:
         - 技能雷达对比
         - 差距与弥补策略
     """
-    llm = _get_llm(temperature=0.2)
+    if llm is None:
+        llm = _get_llm(temperature=0.2)
 
     # 截取长度避免 prompt 过长（保留足够信息量）
     jd_section = job_description[:3000] if len(job_description) > 3000 else job_description

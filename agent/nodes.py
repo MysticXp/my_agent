@@ -1,11 +1,16 @@
 # agent/nodes.py
 # 求职Agent的LangGraph节点函数（规划、执行、汇总、判断）
 # 注意：所有 print 使用纯文本，避免 Windows GBK 编码崩溃
+#
+# 2026-07 重构：引入 Multi-Agent 架构 + Token 成本追踪
+# - executor_node 现在使用 ResumeAnalyzerAgent / QuestionGeneratorAgent
+# - interviewer_node 现在使用 InterviewEvaluatorAgent 评估回答
+# - 所有 LLM 调用自动追踪 token 成本
 
 import os
 import json
 import re
-from typing import Dict, Any
+from typing import Dict, Any, Optional
 from langgraph.types import interrupt
 
 # LangChain 核心
@@ -20,13 +25,52 @@ from agent.prompts import (
     SKILL_EXTRACTION_PROMPT
 )
 
-# 导入所有工具函数
-from tools.resume_optimizer import optimize_resume, extract_skills_from_resume
-from tools.interview import generate_interview_questions
-from tools.jd_resume_analyzer import analyze_jd_resume_fit, extract_match_score
+# ===== Multi-Agent 专用 Agent =====
+# 每个 Agent 有自己独立的 LLM 实例、temperature 和 system prompt
+from agent.agents import (
+    ResumeAnalyzerAgent,
+    QuestionGeneratorAgent,
+    InterviewEvaluatorAgent,
+)
+
+# ===== Token 成本追踪 =====
+from agent.token_tracker import token_tracker
+
+# ===== 工具函数（Agent 内部会用到） =====
+from tools.resume_optimizer import optimize_resume
+from tools.jd_resume_analyzer import extract_match_score
 from tools.jd_retriever import search_similar_jds, build_rag_context
 from tools.jd_store import save_jd as save_jd_to_store
-from tools.question_store import save_questions, get_questions, build_avoid_context
+from tools.question_store import get_questions, build_avoid_context
+
+# ===== Agent 实例（全局单例，只初始化一次） =====
+_resume_analyzer = None
+_question_generator = None
+_interview_evaluator = None
+
+
+def _get_resume_analyzer() -> ResumeAnalyzerAgent:
+    global _resume_analyzer
+    if _resume_analyzer is None:
+        print("[Init] 初始化 ResumeAnalyzerAgent (temperature=0.2)")
+        _resume_analyzer = ResumeAnalyzerAgent()
+    return _resume_analyzer
+
+
+def _get_question_generator() -> QuestionGeneratorAgent:
+    global _question_generator
+    if _question_generator is None:
+        print("[Init] 初始化 QuestionGeneratorAgent (temperature=0.7)")
+        _question_generator = QuestionGeneratorAgent()
+    return _question_generator
+
+
+def _get_interview_evaluator() -> InterviewEvaluatorAgent:
+    global _interview_evaluator
+    if _interview_evaluator is None:
+        print("[Init] 初始化 InterviewEvaluatorAgent (temperature=0.4)")
+        _interview_evaluator = InterviewEvaluatorAgent()
+    return _interview_evaluator
 
 # =========================================================
 # 1. 初始化 LLM（配置 DeepSeek）
@@ -112,6 +156,8 @@ def planner_node(state: JobState) -> JobState:
 
     try:
         response = llm.invoke(prompt_text)
+        # Token 追踪：记录 Planner 的消耗
+        token_tracker.track(response, agent_name="Planner")
         content = response.content.strip()
 
         json_match = re.search(r'\[.*\]', content, re.DOTALL)
@@ -164,23 +210,13 @@ def executor_node(state: JobState) -> JobState:
 
     try:
         if action == "analyze_jd_resume_fit":
-            jd = params.get("job_description") or state.get("job_description")
-            resume = params.get("resume_text") or state.get("resume_text")
-
-            # 如果用户没提供 JD，尝试从 RAG 检索结果中获取完整 JD
-            if (not jd or len(jd) < 50) and state.get("similar_jds"):
-                top_jd = state["similar_jds"][0]
-                jd = top_jd.get("jd_text", "")
-                if jd:
-                    print(f"[Executor] 使用RAG检索到的JD: {top_jd.get('company')} - {top_jd.get('role')}")
-
-            if resume and jd:
-                result = analyze_jd_resume_fit(
-                    job_description=jd,
-                    resume_text=resume
-                )
-                state["jd_resume_analysis"] = result
-            else:
+            # === 使用 ResumeAnalyzerAgent（Multi-Agent 架构） ===
+            # 面试话术："我把 JD-简历分析交给专门的 ResumeAnalyzer，它有自己的 LLM 实例
+            #  和低 temperature 配置，保证分析结果的稳定性。"
+            agent = _get_resume_analyzer()
+            state = agent.run(state, **params)
+            result = state.get("jd_resume_analysis", "")
+            if not result:
                 result = "请提供简历文本和目标岗位描述（JD），以便生成契合度分析报告。"
 
         elif action == "optimize_resume":
@@ -199,29 +235,12 @@ def executor_node(state: JobState) -> JobState:
                 result = "请提供简历文本和目标岗位描述（JD），以便生成个性化优化建议。"
 
         elif action == "generate_questions":
-            role = params.get("job_title") or state.get("role") or state.get("target_role") or "开发工程师"
-            company = params.get("company") or state.get("company") or "目标公司"
-            avoid_ctx = build_avoid_context(role=role, company=company)
-            result = generate_interview_questions(
-                job_title=role,
-                company=company,
-                skills=state.get("user_skills", []),
-                jd_text=state.get("job_description", ""),
-                resume_text=state.get("resume_text", ""),
-                avoid_context=avoid_ctx,
-            )
-            state["interview_questions"] = result
-            # 保存面试题到历史库（按岗位归类）
-            if result:
-                try:
-                    save_questions(
-                        role=state.get("role") or state.get("target_role") or "",
-                        questions=result,
-                        company=state.get("company") or "",
-                    )
-                    print(f"[Executor] {len(result)} 道面试题已保存到历史库")
-                except Exception as e:
-                    print(f"[Executor] 面试题保存失败（非致命）: {e}")
+            # === 使用 QuestionGeneratorAgent（Multi-Agent 架构） ===
+            # 面试话术："QuestionGenerator 有高 temperature 配置保证题目多样性，
+            #  自动查询历史题库做避重。"
+            agent = _get_question_generator()
+            state = agent.run(state, **params)
+            result = "已生成面试题"
 
         else:
             error = f"未知工具: {action}"
@@ -231,6 +250,10 @@ def executor_node(state: JobState) -> JobState:
         error = str(e)
         result = f"执行异常: {error}"
         print(f"[Executor] 工具执行失败: {error}")
+        # 关键：即使执行失败，也要确保 jd_resume_analysis 有值
+        # 否则 fit_review_node 会因为 jd_resume_analysis 为空而跳过 HITL
+        if action == "analyze_jd_resume_fit" and not state.get("jd_resume_analysis"):
+            state["jd_resume_analysis"] = f"（分析暂不可用: {error}）"
 
     step["result"] = result
     step["error"] = error
@@ -273,6 +296,8 @@ def aggregator_node(state: JobState) -> JobState:
 
     try:
         response = llm.invoke(prompt_text)
+        # Token 追踪：记录 Aggregator 的消耗
+        token_tracker.track(response, agent_name="Aggregator")
         state["final_output"] = response.content
         state["status"] = "finished"
         print(f"[Aggregator] 报告生成完成，长度={len(response.content)}")
@@ -299,6 +324,17 @@ def aggregator_node(state: JobState) -> JobState:
                       + (f" (公司={state.get('company')}, 岗位={state.get('role')})" if state.get("company") or state.get("role") else ""))
             except Exception as e:
                 print(f"[Aggregator] JD保存失败（非致命）: {e}")
+
+        # 汇总 Token 消耗到 state（方便前端展示）
+        try:
+            state["token_usage"] = token_tracker.summary()
+            token_tracker.save_to_file("data/token_usage.jsonl")
+            print(f"[Aggregator] Token消耗汇总: "
+                  f"{state['token_usage']['total_calls']} 次调用, "
+                  f"{state['token_usage']['total_tokens']} tokens, "
+                  f"¥{state['token_usage']['estimated_cost_cny']:.4f}")
+        except Exception as e:
+            print(f"[Aggregator] Token保存失败（非致命）: {e}")
 
     except Exception as e:
         print(f"[Aggregator] 生成报告失败: {e}")
@@ -364,34 +400,14 @@ def interviewer_node(state: JobState) -> JobState:
         state["interview_complete"] = True
         return state
 
-    # 1. 生成面试题
+    # 1. 生成面试题（使用 QuestionGeneratorAgent 而非直接调用）
     if not state.get("interview_questions"):
-        print("[Interviewer] 正在生成面试题...")
-        role = state.get("role") or state.get("target_role") or "开发工程师"
-        company = state.get("company") or "目标公司"
-        avoid_ctx = build_avoid_context(role=role, company=company)
-        questions = generate_interview_questions(
-            job_title=role,
-            company=company,
-            skills=state.get("user_skills", []),
-            jd_text=state.get("job_description", ""),
-            resume_text=state.get("resume_text", ""),
-            avoid_context=avoid_ctx,
-        )
-        state["interview_questions"] = questions
+        print("[Interviewer] 正在使用 QuestionGeneratorAgent 生成面试题...")
+        agent = _get_question_generator()
+        state = agent.run(state)
         state["current_q_index"] = 0
-        print(f"[Interviewer] 生成 {len(questions)} 道题")
-        # 保存面试题到历史库（按岗位归类）
-        if questions:
-            try:
-                save_questions(
-                    role=state.get("role") or state.get("target_role") or "",
-                    questions=questions,
-                    company=state.get("company") or "",
-                )
-                print(f"[Interviewer] {len(questions)} 道面试题已保存到历史库")
-            except Exception as e:
-                print(f"[Interviewer] 面试题保存失败（非致命）: {e}")
+        q_count = len(state.get("interview_questions", []))
+        print(f"[Interviewer] 生成 {q_count} 道题")
 
     idx = state["current_q_index"]
     questions = state["interview_questions"]
@@ -403,6 +419,7 @@ def interviewer_node(state: JobState) -> JobState:
         llm = get_llm(temperature=0.3)
         feedback_text = "\n".join(state.get("interview_feedback", []))
         summary = llm.invoke(f"根据以下面试反馈，给出总结评语：\n{feedback_text}")
+        token_tracker.track(summary, agent_name="InterviewSummary")
         state["final_output"] = f"=== 面试结束 ===\n{summary.content}"
         return state
 
@@ -418,18 +435,35 @@ def interviewer_node(state: JobState) -> JobState:
         "total": len(questions)
     })
 
-    # 4. 收到回答 → 评估
+    # 4. 收到回答 → 评估（使用 InterviewEvaluatorAgent）
     if user_answer:
-        print(f"[Interviewer] 收到回答，正在评估...")
-        llm = get_llm(temperature=0.4)
-        eval_prompt = f"""
-问题：{current_q}
-候选人的回答：{user_answer}
-请给出反馈（优点、缺点、改进建议），用2-3句话。
-"""
-        feedback = llm.invoke(eval_prompt).content
-        state["interview_feedback"].append(f"第{idx+1}题反馈: {feedback}")
-        print(f"[Interviewer] 评估完成，进入下一题")
+        print(f"[Interviewer] 收到回答，正在使用 InterviewEvaluatorAgent 评估...")
+        evaluator = _get_interview_evaluator()
+        # 判断题型：根据题目内容关键词
+        q_type = "行为"
+        if any(kw in current_q for kw in ["设计", "架构", "系统", "方案", "高并发", "扩展"]):
+            q_type = "设计"
+        elif any(kw in current_q for kw in ["原理", "源码", "性能", "实现", "算法", "技术"]):
+            q_type = "技术"
+        eval_result = evaluator.evaluate(
+            question=current_q,
+            answer=user_answer,
+            question_type=q_type,
+        )
+        # 格式化反馈
+        feedback = (
+            f"第{idx+1}题反馈 (评分: {eval_result['score']}/10):\n"
+            f"技术准确性: {eval_result['accuracy']}/10 | "
+            f"逻辑结构: {eval_result['structure']}/10 | "
+            f"深度: {eval_result['depth']}/10\n"
+        )
+        if eval_result["strengths"]:
+            feedback += "优点:\n" + "\n".join(f"  ✅ {s}" for s in eval_result["strengths"][:2]) + "\n"
+        if eval_result["suggestion"]:
+            feedback += f"改进建议: {eval_result['suggestion']}\n"
+
+        state["interview_feedback"].append(feedback)
+        print(f"[Interviewer] 评估完成 (评分={eval_result['score']}/10)，进入下一题")
         state["current_q_index"] = idx + 1
         state["pending_question"] = None
 

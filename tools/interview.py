@@ -23,7 +23,8 @@ def generate_interview_questions(
     skills: list,
     jd_text: str = "",
     resume_text: str = "",
-    avoid_context: str = ""
+    avoid_context: str = "",
+    llm=None
 ) -> list:
     """
     根据 JD 和候选人背景，生成定制化模拟面试题。
@@ -35,11 +36,13 @@ def generate_interview_questions(
         jd_text: 岗位描述全文（用于生成针对性问题）
         resume_text: 候选人简历（用于生成个性化问题）
         avoid_context: 历史题目避重上下文（列出已出过的题，要求LLM不要重复）
+        llm: 可选，外部 LLM 实例（用于 Multi-Agent 注入自己的 LLM）
 
     返回:
         面试题字符串列表，共5道（2技术 + 1系统设计 + 2行为）
     """
-    llm = _get_llm(temperature=0.7)
+    if llm is None:
+        llm = _get_llm(temperature=0.7)
 
     # 如果提供了 JD，截取关键部分避免 prompt 过长
     jd_context = jd_text[:1500] if jd_text else f"岗位：{job_title}，公司：{company}"

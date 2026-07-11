@@ -145,6 +145,9 @@ async def chat(request: ChatRequest):
             fit_analysis_text = final_state.get("jd_resume_analysis") or ""
             fit_scores = extract_match_score(fit_analysis_text) if fit_analysis_text else None
 
+            # 获取 Token 消耗统计
+            token_usage = final_state.get("token_usage") or {}
+
             resp = {
                 "status": "finished",
                 "output": final_state.get("final_output") or "分析完成",
@@ -153,6 +156,7 @@ async def chat(request: ChatRequest):
                 "fit_scores": fit_scores,
                 "similar_jds": final_state.get("similar_jds") or [],
                 "similar_questions": final_state.get("similar_questions") or [],
+                "token_usage": token_usage,  # 面试考点：生产环境成本控制
             }
             print(f"[Main] 返回 finished: output 长度={len(resp['output'])}, "
                   f"fit_scores={fit_scores.get('total_score') if fit_scores else 'N/A'}")

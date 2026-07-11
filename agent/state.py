@@ -103,6 +103,21 @@ class JobState(TypedDict):
     final_output: str
     """最终输出给用户的报告内容（由 aggregator_node 生成）"""
     
+    # ---------- Token 成本追踪 ----------
+    token_usage: Dict[str, Any]
+    """
+    Token 消耗统计（由 token_tracker 生成）：
+    {
+        "total_calls": 5,
+        "input_tokens": 1234,
+        "output_tokens": 567,
+        "total_tokens": 1801,
+        "estimated_cost_cny": 0.0123,
+        "agent_breakdown": { "ResumeAnalyzer": {...}, ... }
+    }
+    面试常考：成本控制是生产环境 Agent 的第一道坎
+    """
+
     # ---------- 记忆系统 ----------
     conversation_history: List[Dict]
     """
@@ -171,6 +186,9 @@ def create_initial_state(
         similar_jds=[],
         rag_context="",
         similar_questions=[],
+
+        # Token 追踪（初始为空，结束汇总时填充）
+        token_usage={},
 
         # 控制流
         status="planning",   # 初始状态为 planning
