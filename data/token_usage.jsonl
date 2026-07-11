@@ -1,8 +1,4 @@
-{"agent": "Planner", "prompt_tokens": 902, "completion_tokens": 1046, "total_tokens": 1948, "cost_cny": 0.002543, "timestamp": "2026-07-10T15:54:06.775981", "model": "deepseek-chat"}
-{"agent": "InterviewEvaluator", "prompt_tokens": 363, "completion_tokens": 122, "total_tokens": 485, "cost_cny": 0.000425, "timestamp": "2026-07-10T15:55:57.013958", "model": "deepseek-chat"}
-{"agent": "InterviewEvaluator", "prompt_tokens": 374, "completion_tokens": 266, "total_tokens": 640, "cost_cny": 0.000719, "timestamp": "2026-07-10T15:56:05.011663", "model": "deepseek-chat"}
-{"agent": "InterviewEvaluator", "prompt_tokens": 366, "completion_tokens": 239, "total_tokens": 605, "cost_cny": 0.000661, "timestamp": "2026-07-10T15:56:12.369709", "model": "deepseek-chat"}
-{"agent": "InterviewEvaluator", "prompt_tokens": 448, "completion_tokens": 615, "total_tokens": 1063, "cost_cny": 0.001454, "timestamp": "2026-07-10T16:04:01.578524", "model": "deepseek-chat"}
-{"agent": "InterviewEvaluator", "prompt_tokens": 404, "completion_tokens": 451, "total_tokens": 855, "cost_cny": 0.001104, "timestamp": "2026-07-10T16:05:54.911846", "model": "deepseek-chat"}
-{"agent": "InterviewSummary", "prompt_tokens": 463, "completion_tokens": 497, "total_tokens": 960, "cost_cny": 0.001226, "timestamp": "2026-07-10T16:06:01.976014", "model": "deepseek-chat"}
-{"agent": "Aggregator", "prompt_tokens": 2832, "completion_tokens": 2003, "total_tokens": 4835, "cost_cny": 0.005422, "timestamp": "2026-07-10T16:06:26.755889", "model": "deepseek-chat"}
+{"agent": "Planner", "prompt_tokens": 100, "completion_tokens": 50, "total_tokens": 150, "cost_cny": 0.00015, "timestamp": "2026-07-11T09:32:45.672937", "model": "deepseek-chat"}
+{"agent": "Planner", "prompt_tokens": 100, "completion_tokens": 50, "total_tokens": 150, "cost_cny": 0.00015, "timestamp": "2026-07-11T09:32:45.676612", "model": "deepseek-chat"}
+{"agent": "Planner", "prompt_tokens": 100, "completion_tokens": 50, "total_tokens": 150, "cost_cny": 0.00015, "timestamp": "2026-07-11T09:32:45.691621", "model": "deepseek-chat"}
+{"agent": "Aggregator", "prompt_tokens": 100, "completion_tokens": 50, "total_tokens": 150, "cost_cny": 0.00015, "timestamp": "2026-07-11T09:33:34.095517", "model": "deepseek-chat"}

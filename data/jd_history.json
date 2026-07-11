@@ -201,6 +201,144 @@
         ],
         "one_line_summary": "5年以上经验，精通React和TypeScript，负责中后台系统前端架构与工程化建设，具备性能优化和团队指导能力。"
       }
+    },
+    {
+      "id": "jd_20260711_092742_414152",
+      "created_at": "2026-07-11T09:27:42.414152",
+      "jd_text": "招聘JD",
+      "resume_snapshot": "5年经验",
+      "fit_score": 45,
+      "meta": {
+        "company": "",
+        "role": "",
+        "level": "",
+        "location": "",
+        "tech_stack": [],
+        "required_years": "",
+        "industry": "",
+        "keywords": [],
+        "one_line_summary": ""
+      }
+    },
+    {
+      "id": "jd_20260711_093113_696064",
+      "created_at": "2026-07-11T09:31:13.696064",
+      "jd_text": "招聘高级前端工程师",
+      "resume_snapshot": "5年React经验，熟悉TypeScript",
+      "fit_score": 45,
+      "meta": {
+        "company": "字节跳动",
+        "role": "高级前端开发工程师",
+        "level": "高级",
+        "location": "未知",
+        "tech_stack": [],
+        "required_years": null,
+        "industry": "未知",
+        "keywords": [
+          "高级前端工程师"
+        ],
+        "one_line_summary": "招聘高级前端工程师"
+      }
+    },
+    {
+      "id": "jd_20260711_093140_968006",
+      "created_at": "2026-07-11T09:31:40.968006",
+      "jd_text": "招聘高级前端工程师",
+      "resume_snapshot": "5年React经验，熟悉TypeScript",
+      "fit_score": 45,
+      "meta": {
+        "company": "字节跳动",
+        "role": "高级前端开发工程师",
+        "level": "高级",
+        "location": "未提供",
+        "tech_stack": [],
+        "required_years": null,
+        "industry": "未提供",
+        "keywords": [
+          "高级前端工程师"
+        ],
+        "one_line_summary": "招聘高级前端工程师"
+      }
+    },
+    {
+      "id": "jd_20260711_093142_609694",
+      "created_at": "2026-07-11T09:31:42.609694",
+      "jd_text": "招聘高级前端工程师",
+      "resume_snapshot": "5年React经验，熟悉TypeScript",
+      "fit_score": 0,
+      "meta": {
+        "company": "字节跳动",
+        "role": "高级前端开发工程师",
+        "level": "高级",
+        "location": "",
+        "tech_stack": [],
+        "required_years": "",
+        "industry": "",
+        "keywords": [
+          "高级前端工程师"
+        ],
+        "one_line_summary": "招聘高级前端工程师"
+      }
+    },
+    {
+      "id": "jd_20260711_093306_206336",
+      "created_at": "2026-07-11T09:33:06.206336",
+      "jd_text": "招聘高级前端工程师",
+      "resume_snapshot": "5年React经验，熟悉TypeScript",
+      "fit_score": 45,
+      "meta": {
+        "company": "字节跳动",
+        "role": "高级前端开发工程师",
+        "level": "高级",
+        "location": "",
+        "tech_stack": [],
+        "required_years": "",
+        "industry": "",
+        "keywords": [
+          "高级前端工程师"
+        ],
+        "one_line_summary": "招聘高级前端工程师"
+      }
+    },
+    {
+      "id": "jd_20260711_093334_071379",
+      "created_at": "2026-07-11T09:33:34.071379",
+      "jd_text": "招聘高级前端工程师",
+      "resume_snapshot": "5年React经验，熟悉TypeScript",
+      "fit_score": 55,
+      "meta": {
+        "company": "字节跳动",
+        "role": "高级前端开发工程师",
+        "level": "高级",
+        "location": "",
+        "tech_stack": [],
+        "required_years": "",
+        "industry": "",
+        "keywords": [
+          "高级前端工程师"
+        ],
+        "one_line_summary": "招聘高级前端工程师"
+      }
+    },
+    {
+      "id": "jd_20260711_093335_406301",
+      "created_at": "2026-07-11T09:33:35.406301",
+      "jd_text": "招聘高级前端工程师",
+      "resume_snapshot": "5年React经验，熟悉TypeScript",
+      "fit_score": 0,
+      "meta": {
+        "company": "字节跳动",
+        "role": "高级前端开发工程师",
+        "level": "高级",
+        "location": "未知",
+        "tech_stack": [],
+        "required_years": null,
+        "industry": "未知",
+        "keywords": [
+          "高级前端工程师"
+        ],
+        "one_line_summary": "招聘高级前端工程师"
+      }
     }
   ]
 }
