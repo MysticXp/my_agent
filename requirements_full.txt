@@ -159,6 +159,7 @@ transformers>=4.38.0
 tokenizers>=0.22.0
 huggingface-hub>=1.11.0
 safetensors>=0.7.0
+sentence-transformers>=3.0.0
 
 
 # =========================================================
