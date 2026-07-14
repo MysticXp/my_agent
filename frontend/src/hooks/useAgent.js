@@ -81,23 +81,38 @@ export const useAgent = () => {
         setStreaming(false);
         setStatus('finished');
         setReport(data);
-        if (data.fit_scores) setFitScores(data.fit_scores);
-        if (data.fit_analysis) setFitAnalysis(data.fit_analysis);
-        if (data.feedback) {
-          data.feedback.forEach(f => setConversation(prev => [...prev, { role: 'assistant', content: f }]));
-        }
-        if (data.output) {
-          setConversation(prev => {
-            const updated = [...prev];
+        // 始终设 fit 数据（不管是否 falsy）
+        setFitScores(data.fit_scores || null);
+        setFitAnalysis(data.fit_analysis || null);
+
+        // 合并 conversation 更新：替换 streaming 消息 + 追加 feedback
+        setConversation(prev => {
+          const updated = [...prev];
+          let replaced = false;
+          // 从后往前找 streaming 消息，替换为完整 output
+          if (data.output) {
             for (let i = updated.length - 1; i >= 0; i--) {
               if (updated[i].role === 'assistant' && updated[i].streaming) {
                 updated[i] = { role: 'assistant', content: data.output };
-                return updated;
+                replaced = true;
+                break;
               }
             }
-            return [...prev, { role: 'assistant', content: data.output }];
-          });
-        }
+            if (!replaced) {
+              updated.push({ role: 'assistant', content: data.output });
+            }
+          }
+          // 追加 feedback（排除已在对话中的）
+          if (data.feedback && data.feedback.length > 0) {
+            const existing = updated.map(m => m.content);
+            data.feedback.forEach(f => {
+              if (!existing.includes(f)) {
+                updated.push({ role: 'assistant', content: f });
+              }
+            });
+          }
+          return updated;
+        });
         setCurrentQuestion(null);
       },
       onError: (err) => {
@@ -111,21 +126,20 @@ export const useAgent = () => {
 
   // 启动面试或提交答案（优先流式，回退同步）
   const submit = useCallback(async (payload) => {
+    const userMsg = payload.message || payload.answer;
+    if (userMsg) {
+      setConversation(prev => [...prev, { role: 'user', content: userMsg }]);
+    }
+
+    // 有 message 或 answer 就走流式（submitStream 自己管理 loading）
+    if (payload.message || payload.answer) {
+      submitStream(payload);
+      return;
+    }
+
+    // === 以下为同步回退（当前不会被走到，保留兼容） ===
     setLoading(true);
     try {
-      if (payload.message) {
-        setConversation(prev => [...prev, { role: 'user', content: payload.message }]);
-      }
-      if (payload.answer) {
-        setConversation(prev => [...prev, { role: 'user', content: payload.answer }]);
-      }
-
-      // 非 answer-only 的请求走流式
-      if (payload.message) {
-        submitStream(payload);
-        return;
-      }
-
       const data = await sendMessage(payload);
 
       if (data.status === 'fit_review') {

@@ -72,79 +72,82 @@ NODE_LABELS = {
 }
 
 async def _stream_agent(input_data: dict, is_resume: bool = False):
-    """运行 agent.astream()，用 state 字段变化推断节点进度，发射 SSE 事件"""
+    """运行 agent.astream_events()，输出节点事件 + token 事件"""
     final_state = {}
     seen_interrupt = False
-    # 标记哪些节点已完成（通过检测 state 中的关键字段）
-    detected = set()
-
-    def check_node_progress(values):
-        """检测新完成的节点并发射 node_start 事件"""
-        events = []
-        # planner 完成后 plan 字段会被填充
-        if values.get("plan") and "planner" not in detected:
-            detected.add("planner")
-            events.append(("node_start", {"node": "planner", "label": "分析需求"}))
-        # executor 完成后 jd_resume_analysis 或 interview_questions 会被填充
-        if values.get("jd_resume_analysis") and "executor" not in detected:
-            detected.add("executor")
-            events.append(("node_start", {"node": "executor", "label": "执行分析"}))
-        if values.get("interview_questions") and "questions" not in detected:
-            detected.add("questions")
-            events.append(("node_start", {"node": "question", "label": "生成面试题"}))
-        # aggregator 完成后 final_output 会被填充
-        if values.get("final_output") and "aggregator" not in detected:
-            detected.add("aggregator")
-            events.append(("node_start", {"node": "aggregator", "label": "生成报告"}))
-        return events
 
     try:
         if is_resume:
-            agen = agent.astream(Command(resume=input_data["answer"]), config=config)
+            agen = agent.astream_events(
+                Command(resume=input_data["answer"]),
+                config=config, version="v2",
+            )
         else:
-            agen = agent.astream(create_initial_state(
+            agen = agent.astream_events(create_initial_state(
                 user_input=input_data["message"],
                 resume=input_data.get("resume"),
                 job_description=input_data.get("job_description"),
                 company=input_data.get("company"),
                 role=input_data.get("role"),
-            ), config=config)
+            ), config=config, version="v2")
 
-        async for chunk in agen:
-            vals = chunk if isinstance(chunk, dict) else {}
-            final_state.update(vals)
+        async for event in agen:
+            evt = event["event"]
+            name = event.get("name", "")
 
-            # 节点进度事件
-            for evt_name, evt_data in check_node_progress(vals):
-                yield {"event": evt_name, "data": json.dumps(evt_data, ensure_ascii=False)}
+            # ---- 节点开始/结束 ----
+            if evt == "on_chain_start" and name in NODE_LABELS:
+                yield {"event": "node_start", "data": json.dumps(
+                    {"node": name, "label": NODE_LABELS[name]}, ensure_ascii=False)}
+                continue
 
-            # 检查 interrupt
-            il = vals.get("__interrupt__")
-            if il and not seen_interrupt:
-                seen_interrupt = True
-                for intr in il:
-                    v = intr.value if hasattr(intr, "value") else intr
-                    t = v.get("type", "")
-                    if t == "fit_review":
-                        yield {"event": "interrupt", "data": json.dumps({
-                            "type": "fit_review",
-                            "fit_analysis": v.get("fit_analysis", ""),
-                            "fit_scores": extract_match_score(v.get("fit_analysis", "")) if v.get("fit_analysis") else None,
-                            "similar_jds": v.get("similar_jds", []),
-                            "similar_questions": v.get("similar_questions", []),
-                            "question": v.get("question", "契合度分析已完成，是否继续进行模拟面试？"),
-                            "options": v.get("options", []),
-                        }, ensure_ascii=False)}
-                    elif t == "interview":
-                        yield {"event": "interrupt", "data": json.dumps({
-                            "type": "interview",
-                            "question": v.get("question", ""),
-                            "question_num": v.get("question_num", 1),
-                            "total": v.get("total", 5),
-                        }, ensure_ascii=False)}
-                return
+            if evt == "on_chain_end" and name in NODE_LABELS:
+                yield {"event": "node_end", "data": json.dumps(
+                    {"node": name}, ensure_ascii=False)}
+                continue
 
-        # Done
+            # ---- 逐 token 流（来自 aggregator 的 stream() 调用） ----
+            if evt == "on_chat_model_stream":
+                chunk = event["data"].get("chunk")
+                if chunk and hasattr(chunk, "content") and chunk.content:
+                    yield {"event": "token", "data": json.dumps(
+                        {"token": chunk.content}, ensure_ascii=False)}
+                continue
+
+            # ---- 状态更新（含 interrupt） ----
+            if evt == "values" or evt == "on_chain_stream":
+                vals = event.get("data", {})
+                # on_chain_stream 的 data 可能包在 {values: {...}} 里
+                if isinstance(vals, dict):
+                    if "values" in vals:
+                        vals = vals["values"]
+                    final_state.update(vals)
+                    il = vals.get("__interrupt__")
+                    if il and not seen_interrupt:
+                        seen_interrupt = True
+                        for intr in il:
+                            v = intr.value if hasattr(intr, "value") else intr
+                            t = v.get("type", "")
+                            if t == "fit_review":
+                                yield {"event": "interrupt", "data": json.dumps({
+                                    "type": "fit_review",
+                                    "fit_analysis": v.get("fit_analysis", ""),
+                                    "fit_scores": extract_match_score(v.get("fit_analysis", "")) if v.get("fit_analysis") else None,
+                                    "similar_jds": v.get("similar_jds", []),
+                                    "similar_questions": v.get("similar_questions", []),
+                                    "question": v.get("question", "契合度分析已完成，是否继续进行模拟面试？"),
+                                    "options": v.get("options", []),
+                                }, ensure_ascii=False)}
+                            elif t == "interview":
+                                yield {"event": "interrupt", "data": json.dumps({
+                                    "type": "interview",
+                                    "question": v.get("question", ""),
+                                    "question_num": v.get("question_num", 1),
+                                    "total": v.get("total", 5),
+                                }, ensure_ascii=False)}
+                        return
+
+        # ---- 完成 ----
         fa = final_state.get("jd_resume_analysis") or ""
         yield {"event": "done", "data": json.dumps({
             "status": "finished",
@@ -158,6 +161,9 @@ async def _stream_agent(input_data: dict, is_resume: bool = False):
         }, ensure_ascii=False)}
 
     except Exception as e:
+        import traceback
+        tb = traceback.format_exc()
+        print(f"[SSE Error] {e}\n{tb}")
         yield {"event": "error", "data": json.dumps({"error": str(e)}, ensure_ascii=False)}
 
 
