@@ -15,6 +15,8 @@ export const useAgent = () => {
   const [similarQuestions, setSimilarQuestions] = useState([]);
   const [loading, setLoading] = useState(false);
   const [streaming, setStreaming] = useState(false);
+  const [streamReport, setStreamReport] = useState('');
+  const streamReportRef = useRef(''); // ref 版本，闭包安全
   const abortRef = useRef(null);
 
   // SSE 流式提交（优先使用）
@@ -29,19 +31,12 @@ export const useAgent = () => {
 
     abortRef.current = streamChat('/chat/stream', payload, {
       onToken: (token) => {
-        setConversation(prev => {
-          const updated = [...prev];
-          for (let i = updated.length - 1; i >= 0; i--) {
-            if (updated[i].role === 'assistant' && updated[i].streaming) {
-              updated[i] = { ...updated[i], content: updated[i].content + token };
-              return updated;
-            }
-          }
-          updated.push({ role: 'assistant', content: token, streaming: true });
-          return updated;
-        });
+        streamReportRef.current += token;
+        setStreamReport(streamReportRef.current);
       },
       onInterrupt: (data) => {
+        setStreamReport('');
+        streamReportRef.current = '';
         setLoading(false);
         setStreaming(false);
         if (data.type === 'fit_review') {
@@ -62,43 +57,26 @@ export const useAgent = () => {
       onDone: (data) => {
         setLoading(false);
         setStreaming(false);
+        const finalOutput = streamReportRef.current || data.output || '';
+        setStreamReport(''); // 清除流式预览，避免闪烁
+        streamReportRef.current = '';
         setStatus('finished');
-        setReport(data);
-        // 始终设 fit 数据（不管是否 falsy）
+        setReport({ ...data, output: finalOutput });
         setFitScores(data.fit_scores || null);
         setFitAnalysis(data.fit_analysis || null);
-
-        // 合并 conversation 更新：替换 streaming 消息 + 追加 feedback
-        setConversation(prev => {
-          const updated = [...prev];
-          let replaced = false;
-          // 从后往前找 streaming 消息，替换为完整 output
-          if (data.output) {
-            for (let i = updated.length - 1; i >= 0; i--) {
-              if (updated[i].role === 'assistant' && updated[i].streaming) {
-                updated[i] = { role: 'assistant', content: data.output };
-                replaced = true;
-                break;
-              }
-            }
-            if (!replaced) {
-              updated.push({ role: 'assistant', content: data.output });
-            }
-          }
-          // 追加 feedback（排除已在对话中的）
-          if (data.feedback && data.feedback.length > 0) {
-            const existing = updated.map(m => m.content);
-            data.feedback.forEach(f => {
-              if (!existing.includes(f)) {
-                updated.push({ role: 'assistant', content: f });
-              }
-            });
-          }
-          return updated;
-        });
+        // feedback 追加到对话
+        if (data.feedback && data.feedback.length > 0) {
+          setConversation(prev => {
+            const existing = prev.map(m => m.content);
+            const newItems = data.feedback.filter(f => !existing.includes(f));
+            return [...prev, ...newItems.map(f => ({ role: 'assistant', content: f }))];
+          });
+        }
         setCurrentQuestion(null);
       },
       onError: (err) => {
+        setStreamReport('');
+        streamReportRef.current = '';
         setLoading(false);
         setStreaming(false);
         setStatus('error');
@@ -204,6 +182,8 @@ export const useAgent = () => {
     setSimilarQuestions([]);
     setLoading(false);
     setStreaming(false);
+    setStreamReport('');
+    streamReportRef.current = '';
   }, []);
 
   return {
@@ -219,6 +199,7 @@ export const useAgent = () => {
     similarQuestions,
     loading,
     streaming,
+    streamReport,
     submit,
     decideInterview,
     reset,

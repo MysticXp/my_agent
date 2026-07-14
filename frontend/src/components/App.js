@@ -25,6 +25,7 @@ function App() {
     submit,
     decideInterview,
     reset,
+    streamReport,
   } = useAgent();
 
   const [resume, setResume] = useState('5年Java经验，Spring Cloud，高并发项目经验');
@@ -136,8 +137,18 @@ function App() {
               />
             )}
 
-            {/* 面试结束：显示契合度分析 + 报告 */}
-            {status === 'finished' && (
+            {/* 报告流式输出（生成中） */}
+            {streaming && streamReport && (
+              <div className="report-panel">
+                <h2>📊 正在生成报告...</h2>
+                <div className="report-content streaming-cursor">
+                  <pre style={{ whiteSpace: 'pre-wrap', fontFamily: 'inherit', margin: 0 }}>{streamReport}</pre>
+                </div>
+              </div>
+            )}
+
+            {/* 面试完成 */}
+            {(status === 'finished') && (
               <>
                 <FitAnalysis scores={fitScores} analysis={fitAnalysis} />
                 {report && <Report report={report} />}
