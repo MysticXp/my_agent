@@ -30,21 +30,6 @@ export const useAgent = () => {
     }
 
     abortRef.current = streamChat('/chat/stream', payload, {
-      onNodeStart: (node, label) => {
-        setConversation(prev => [...prev, { role: 'progress', content: `⏳ ${label}...`, status: 'thinking' }]);
-      },
-      onNodeEnd: () => {
-        setConversation(prev => {
-          const updated = [...prev];
-          for (let i = updated.length - 1; i >= 0; i--) {
-            if (updated[i].role === 'progress') {
-              updated[i] = { ...updated[i], status: 'done' };
-              break;
-            }
-          }
-          return updated;
-        });
-      },
       onToken: (token) => {
         setConversation(prev => {
           const updated = [...prev];
