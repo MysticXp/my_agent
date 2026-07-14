@@ -297,14 +297,16 @@ def aggregator_node(state: JobState) -> JobState:
     try:
         # 改用 stream() 实现逐 token 输出
         full_content = ""
+        last_chunk = None
         for chunk in llm.stream(prompt_text):
             if chunk.content:
                 full_content += chunk.content
-        # Token 追踪：记录 Aggregator 的消耗（用最后一个 chunk 的 response_metadata）
-        if hasattr(chunk, 'response_metadata') and chunk.response_metadata:
+                last_chunk = chunk
+        # Token 追踪：记录 Aggregator 的消耗
+        if last_chunk and hasattr(last_chunk, 'response_metadata') and last_chunk.response_metadata:
             token_tracker.track_raw(
-                prompt_tokens=chunk.response_metadata.get("token_usage", {}).get("prompt_tokens", 0),
-                completion_tokens=chunk.response_metadata.get("token_usage", {}).get("completion_tokens", 0),
+                prompt_tokens=last_chunk.response_metadata.get("token_usage", {}).get("prompt_tokens", 0),
+                completion_tokens=last_chunk.response_metadata.get("token_usage", {}).get("completion_tokens", 0),
                 agent_name="Aggregator",
             )
         state["final_output"] = full_content
