@@ -25,9 +25,7 @@ export const useAgent = () => {
     if (payload.message) {
       setConversation(prev => [...prev, { role: 'user', content: payload.message }]);
     }
-    if (payload.answer) {
-      setConversation(prev => [...prev, { role: 'user', content: payload.answer }]);
-    }
+    // answer 的消息由调用方（decideInterview / handleAnswerSubmit）自行记录
 
     abortRef.current = streamChat('/chat/stream', payload, {
       onToken: (token) => {
@@ -181,43 +179,12 @@ export const useAgent = () => {
     }
   }, []);
 
-  // 契合度审查：用户决定是否继续面试
-  const decideInterview = useCallback(async (decision) => {
-    setLoading(true);
-    try {
-      setConversation(prev => [...prev, { role: 'user', content: decision === 'continue' ? '继续面试' : '跳过面试' }]);
-      const data = await sendMessage({ answer: decision });
-
-      if (data.status === 'interviewing') {
-        setStatus('interviewing');
-        setCurrentQuestion(data.question);
-        setQuestionNum(data.question_num);
-        setTotalQuestions(data.total);
-        setConversation(prev => [...prev, { role: 'assistant', content: `Q${data.question_num}: ${data.question}` }]);
-      } else if (data.status === 'finished') {
-        setStatus('finished');
-        setReport(data);
-        if (data.fit_scores) setFitScores(data.fit_scores);
-        if (data.fit_analysis) setFitAnalysis(data.fit_analysis);
-        if (data.similar_jds) setSimilarJds(data.similar_jds);
-        if (data.similar_questions) setSimilarQuestions(data.similar_questions);
-        if (data.feedback) {
-          data.feedback.forEach(f => {
-            setConversation(prev => [...prev, { role: 'assistant', content: f }]);
-          });
-        }
-        if (data.output) {
-          setConversation(prev => [...prev, { role: 'assistant', content: data.output }]);
-        }
-        setCurrentQuestion(null);
-      }
-    } catch (error) {
-      setStatus('error');
-      setConversation(prev => [...prev, { role: 'error', content: error.message || '网络错误' }]);
-    } finally {
-      setLoading(false);
-    }
-  }, []);
+  // 契合度审查：用户决定是否继续面试（走 stream）
+  const decideInterview = useCallback((decision) => {
+    const display = decision === 'continue' ? '继续面试' : '跳过面试';
+    setConversation(prev => [...prev, { role: 'user', content: display }]);
+    submitStream({ answer: decision });
+  }, [submitStream]);
 
   // 重置状态
   const reset = useCallback(() => {
