@@ -82,8 +82,8 @@ function App() {
       </header>
 
       <main className="app-main">
-        {/* 输入区：仅在空闲状态显示 */}
-        {status === 'idle' && (
+        {/* 输入区：仅在空闲状态且非 streaming 时显示 */}
+        {status === 'idle' && !streaming && (
           <ChatInput
             onSubmit={handleInitialSubmit}
             resume={resume}
@@ -98,8 +98,8 @@ function App() {
           />
         )}
 
-        {/* 对话/面试区 */}
-        {(status === 'fit_review' || status === 'interviewing' || status === 'finished') && (
+        {/* 对话/面试区（streaming 时也要显示） */}
+        {(streaming || status === 'fit_review' || status === 'interviewing' || status === 'finished') && (
           <div className="conversation-area">
             <div className="conversation-log">
               {conversation.map((msg, idx) => (
