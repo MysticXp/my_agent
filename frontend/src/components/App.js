@@ -21,6 +21,7 @@ function App() {
     similarJds,
     similarQuestions,
     loading,
+    streaming,
     submit,
     decideInterview,
     reset,

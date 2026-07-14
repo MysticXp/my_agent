@@ -2,9 +2,12 @@
 # 这是整个求职Agent的后端启动文件
 
 import os
+import json
+import asyncio
 from fastapi import FastAPI, HTTPException, UploadFile, File
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
+from sse_starlette.sse import EventSourceResponse
 from pydantic import BaseModel
 from typing import Optional, List, Dict
 from tools.jd_resume_analyzer import extract_match_score
@@ -56,11 +59,171 @@ print("[Main] 正在启动求职Agent，初始化LangGraph...")
 agent = build_job_agent()
 print("[Main] Agent初始化完成！")
 
-# --- 定义API接口 ---
+# ============================================================
+# SSE 流式端点（新！支持逐 token 推送）
+# ============================================================
+
+# 节点名 → 中文描述映射
+NODE_LABELS = {
+    "planner": "分析需求",
+    "executor": "执行任务",
+    "fit_review": "契合度审查",
+    "interviewer": "模拟面试",
+    "aggregator": "生成报告",
+}
+
+async def _stream_agent(input_data: dict, is_resume: bool = False):
+    """运行 agent.astream() 并逐事件 yield SSE 格式数据"""
+    queue = asyncio.Queue()
+
+    async def run_agent():
+        try:
+            if is_resume:
+                # 恢复中断
+                async for event in agent.astream(
+                    Command(resume=input_data["answer"]),
+                    config=config,
+                    version="v2",
+                ):
+                    await queue.put(event)
+            else:
+                # 首次启动
+                state = create_initial_state(
+                    user_input=input_data["message"],
+                    resume=input_data.get("resume"),
+                    job_description=input_data.get("job_description"),
+                    company=input_data.get("company"),
+                    role=input_data.get("role"),
+                )
+                async for event in agent.astream(state, config=config, version="v2"):
+                    await queue.put(event)
+        except Exception as e:
+            await queue.put({"event": "error", "data": {"error": str(e)}})
+        finally:
+            await queue.put(None)  # 结束信号
+
+    # 启动 agent 任务
+    task = asyncio.create_task(run_agent())
+
+    # 收集最终状态用于后处理
+    final_state = {}
+    pending_node = None
+
+    while True:
+        event = await queue.get()
+        if event is None:
+            break
+
+        event_type = event.get("event", "")
+        name = event.get("name", "")
+
+        # ---- 节点事件 ----
+        if event_type == "on_chain_start" and name in NODE_LABELS:
+            pending_node = name
+            yield {
+                "event": "node_start",
+                "data": json.dumps({"node": name, "label": NODE_LABELS[name]}, ensure_ascii=False),
+            }
+
+        elif event_type == "on_chain_end" and name in NODE_LABELS:
+            pending_node = None
+            yield {
+                "event": "node_end",
+                "data": json.dumps({"node": name}, ensure_ascii=False),
+            }
+
+        # ---- LLM Token 事件 ----
+        elif event_type == "on_chat_model_stream":
+            chunk = event.get("data", {}).get("chunk", None)
+            if chunk and hasattr(chunk, "content") and chunk.content:
+                yield {
+                    "event": "token",
+                    "data": json.dumps({"token": chunk.content}, ensure_ascii=False),
+                }
+
+        # ---- 状态更新（包含 interrupt） ----
+        elif event_type == "on_chain_stream" or event_type == "values":
+            values = event.get("data", {}).get("values", event.get("data", {}))
+            if isinstance(values, dict):
+                # 保存最终 state
+                if name == "aggregator" or event_type == "values":
+                    final_state.update(values)
+
+                # 检查 interrupt
+                interrupt_list = values.get("__interrupt__")
+                if interrupt_list:
+                    for intr in interrupt_list:
+                        intr_val = intr.value if hasattr(intr, "value") else intr
+                        intr_type = intr_val.get("type", "")
+                        if intr_type == "fit_review":
+                            yield {
+                                "event": "interrupt",
+                                "data": json.dumps({
+                                    "type": "fit_review",
+                                    "fit_analysis": intr_val.get("fit_analysis", ""),
+                                    "fit_scores": extract_match_score(intr_val.get("fit_analysis", "")) if intr_val.get("fit_analysis") else None,
+                                    "similar_jds": intr_val.get("similar_jds", []),
+                                    "similar_questions": intr_val.get("similar_questions", []),
+                                    "question": intr_val.get("question", "契合度分析已完成，是否继续进行模拟面试？"),
+                                    "options": intr_val.get("options", []),
+                                }, ensure_ascii=False),
+                            }
+                        elif intr_type == "interview":
+                            yield {
+                                "event": "interrupt",
+                                "data": json.dumps({
+                                    "type": "interview",
+                                    "question": intr_val.get("question", ""),
+                                    "question_num": intr_val.get("question_num", 1),
+                                    "total": intr_val.get("total", 5),
+                                }, ensure_ascii=False),
+                            }
+
+    # ---- 最终结果 ----
+    if final_state and not final_state.get("__interrupt__"):
+        fit_analysis_text = final_state.get("jd_resume_analysis") or ""
+        fit_scores = extract_match_score(fit_analysis_text) if fit_analysis_text else None
+        token_usage = final_state.get("token_usage") or {}
+
+        yield {
+            "event": "done",
+            "data": json.dumps({
+                "status": "finished",
+                "output": final_state.get("final_output") or "分析完成",
+                "feedback": final_state.get("interview_feedback") or [],
+                "fit_analysis": fit_analysis_text,
+                "fit_scores": fit_scores,
+                "similar_jds": final_state.get("similar_jds") or [],
+                "similar_questions": final_state.get("similar_questions") or [],
+                "token_usage": token_usage,
+            }, ensure_ascii=False),
+        }
+
+    await task  # 确保任务结束
+
+
+@app.post("/chat/stream")
+async def chat_stream(request: ChatRequest):
+    """
+    SSE 流式聊天接口。
+    返回 EventStream，包含 node_start/node_end/token/interrupt/done 事件。
+    """
+    is_resume = bool(request.answer)
+    input_data = request.model_dump() if hasattr(request, "model_dump") else request.dict()
+    return EventSourceResponse(
+        _stream_agent(input_data, is_resume=is_resume),
+        headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
+    )
+
+
+# ============================================================
+# 原有同步接口（保留兼容）
+# ============================================================
+
 @app.post("/chat")
 async def chat(request: ChatRequest):
     """
-    核心聊天接口
+    核心聊天接口（同步版）
     接收用户消息和可选简历，返回Agent生成的求职报告
     """
     try:
@@ -164,6 +327,11 @@ async def chat(request: ChatRequest):
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Agent执行出错: {str(e)}")
 
+
+# ============================================================
+# 其他接口
+# ============================================================
+
 @app.post("/upload-resume")
 async def upload_resume(file: UploadFile = File(...)):
     """
@@ -228,11 +396,7 @@ async def remove_jd(jd_id: str):
 
 @app.post("/rematch")
 async def rematch_resume(request: ChatRequest):
-    """
-    重新匹配：用新的简历文本与所有历史 JD 做向量相似度计算，
-    返回按契合度排序的 JD 列表。
-    用于「简历更新后，看哪些 JD 匹配度提升了」的场景。
-    """
+    """用简历文本与所有历史 JD 做向量相似度计算"""
     resume = request.resume or request.message
     if not resume or len(resume) < 20:
         raise HTTPException(status_code=400, detail="简历文本太短（至少20字符），请提供完整简历")
@@ -289,7 +453,6 @@ async def question_history(role: str = "", company: str = ""):
                 "questions": questions,
             })
         else:
-            # 返回按岗位分组的概览
             return JSONResponse(content={
                 "status": "ok",
                 **get_question_stats(),
@@ -302,7 +465,8 @@ async def question_history(role: str = "", company: str = ""):
 async def root():
     return {"message": "求职AI助手已上线！请访问 /docs 查看接口文档"}
 
-# --- 启动命令（仅供本地调试，实际运行建议用uvicorn命令）---
+
+# --- 启动命令 ---
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run(app, host="0.0.0.0", port=8000)

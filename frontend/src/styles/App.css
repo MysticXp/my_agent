@@ -56,3 +56,24 @@ button:hover:not(:disabled) { background: #0056b3; }
 .upload-zone.drag-over { border-color: #28a745; background: #f0fff4; color: #28a745; }
 .upload-zone.uploading { border-color: #f59e0b; background: #fffdf0; cursor: not-allowed; opacity: 0.7; }
 .upload-zone u { text-decoration-color: #007bff; }
+
+/* ---- Progress Message (SSE Streaming) ---- */
+.message.progress { justify-content: center; }
+.message.progress .message-content {
+  background: #f0f4ff; border: 1px solid #c7d2fe;
+  color: #4338ca; font-size: 0.85rem;
+  border-radius: 20px; padding: 6px 16px; text-align: center;
+}
+.message.progress.done .message-content {
+  background: #ecfdf5; border-color: #a7f3d0; color: #059669;
+}
+
+/* ---- Streaming Cursor ---- */
+.streaming-cursor::after {
+  content: '|'; animation: cursor-blink 0.8s step-end infinite;
+  color: #7c3aed; font-weight: bold;
+}
+@keyframes cursor-blink {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0; }
+}
