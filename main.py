@@ -117,12 +117,15 @@ async def _stream_agent(input_data: dict, is_resume: bool = False):
             # ---- 状态更新（含 interrupt） ----
             if evt == "values" or evt == "on_chain_stream":
                 vals = event.get("data", {})
-                # on_chain_stream 的 data 可能包在 {values: {...}} 里
                 if isinstance(vals, dict):
-                    if "values" in vals:
+                    # on_chain_stream 的 state 在 event["data"]["chunk"] 里！
+                    if "chunk" in vals:
+                        vals = vals["chunk"]
+                    elif "values" in vals:
                         vals = vals["values"]
-                    final_state.update(vals)
-                    il = vals.get("__interrupt__")
+                    if isinstance(vals, dict):
+                        final_state.update(vals)
+                        il = vals.get("__interrupt__")
                     if il and not seen_interrupt:
                         seen_interrupt = True
                         for intr in il:
