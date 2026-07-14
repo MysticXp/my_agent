@@ -6,8 +6,7 @@ import json
 import asyncio
 from fastapi import FastAPI, HTTPException, UploadFile, File
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
-from sse_starlette.sse import EventSourceResponse
+from fastapi.responses import JSONResponse, StreamingResponse
 from pydantic import BaseModel
 from typing import Optional, List, Dict
 from tools.jd_resume_analyzer import extract_match_score
@@ -155,13 +154,18 @@ async def _stream_agent(input_data: dict, is_resume: bool = False):
 @app.post("/chat/stream")
 async def chat_stream(request: ChatRequest):
     """
-    SSE 流式聊天接口。
-    返回 EventStream，包含 node_start/node_end/token/interrupt/done 事件。
+    SSE 流式聊天接口（手动格式化，不依赖 sse-starlette）。
     """
     is_resume = bool(request.answer)
     input_data = request.model_dump() if hasattr(request, "model_dump") else request.dict()
-    return EventSourceResponse(
-        _stream_agent(input_data, is_resume=is_resume),
+
+    async def event_stream():
+        async for event in _stream_agent(input_data, is_resume=is_resume):
+            yield f"event: {event['event']}\ndata: {event['data']}\n\n"
+
+    return StreamingResponse(
+        event_stream(),
+        media_type="text/event-stream",
         headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
     )
 
