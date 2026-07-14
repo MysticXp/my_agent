@@ -73,114 +73,63 @@ NODE_LABELS = {
 }
 
 async def _stream_agent(input_data: dict, is_resume: bool = False):
-    """运行 agent.astream() 并逐事件 yield SSE 格式数据"""
-    queue = asyncio.Queue()
-
-    async def run_agent():
-        try:
-            if is_resume:
-                # 恢复中断
-                async for event in agent.astream(
-                    Command(resume=input_data["answer"]),
-                    config=config,
-                    version="v2",
-                ):
-                    await queue.put(event)
-            else:
-                # 首次启动
-                state = create_initial_state(
-                    user_input=input_data["message"],
-                    resume=input_data.get("resume"),
-                    job_description=input_data.get("job_description"),
-                    company=input_data.get("company"),
-                    role=input_data.get("role"),
-                )
-                async for event in agent.astream(state, config=config, version="v2"):
-                    await queue.put(event)
-        except Exception as e:
-            await queue.put({"event": "error", "data": {"error": str(e)}})
-        finally:
-            await queue.put(None)  # 结束信号
-
-    # 启动 agent 任务
-    task = asyncio.create_task(run_agent())
-
-    # 收集最终状态用于后处理
+    """运行 agent.astream() 并逐状态 yield SSE 事件"""
     final_state = {}
-    pending_node = None
+    seen_interrupt = False
 
-    while True:
-        event = await queue.get()
-        if event is None:
-            break
+    try:
+        if is_resume:
+            agen = agent.astream(
+                Command(resume=input_data["answer"]),
+                config=config,
+            )
+        else:
+            state = create_initial_state(
+                user_input=input_data["message"],
+                resume=input_data.get("resume"),
+                job_description=input_data.get("job_description"),
+                company=input_data.get("company"),
+                role=input_data.get("role"),
+            )
+            agen = agent.astream(state, config=config)
 
-        event_type = event.get("event", "")
-        name = event.get("name", "")
+        async for chunk in agen:
+            values = chunk if isinstance(chunk, dict) else {}
+            final_state.update(values)
 
-        # ---- 节点事件 ----
-        if event_type == "on_chain_start" and name in NODE_LABELS:
-            pending_node = name
-            yield {
-                "event": "node_start",
-                "data": json.dumps({"node": name, "label": NODE_LABELS[name]}, ensure_ascii=False),
-            }
+            # 检查 interrupt
+            interrupt_list = values.get("__interrupt__")
+            if interrupt_list and not seen_interrupt:
+                seen_interrupt = True
+                for intr in interrupt_list:
+                    intr_val = intr.value if hasattr(intr, "value") else intr
+                    intr_type = intr_val.get("type", "")
+                    if intr_type == "fit_review":
+                        yield {
+                            "event": "interrupt",
+                            "data": json.dumps({
+                                "type": "fit_review",
+                                "fit_analysis": intr_val.get("fit_analysis", ""),
+                                "fit_scores": extract_match_score(intr_val.get("fit_analysis", "")) if intr_val.get("fit_analysis") else None,
+                                "similar_jds": intr_val.get("similar_jds", []),
+                                "similar_questions": intr_val.get("similar_questions", []),
+                                "question": intr_val.get("question", "契合度分析已完成，是否继续进行模拟面试？"),
+                                "options": intr_val.get("options", []),
+                            }, ensure_ascii=False),
+                        }
+                    elif intr_type == "interview":
+                        yield {
+                            "event": "interrupt",
+                            "data": json.dumps({
+                                "type": "interview",
+                                "question": intr_val.get("question", ""),
+                                "question_num": intr_val.get("question_num", 1),
+                                "total": intr_val.get("total", 5),
+                            }, ensure_ascii=False),
+                        }
+                return  # interrupt 后结束流
 
-        elif event_type == "on_chain_end" and name in NODE_LABELS:
-            pending_node = None
-            yield {
-                "event": "node_end",
-                "data": json.dumps({"node": name}, ensure_ascii=False),
-            }
-
-        # ---- LLM Token 事件 ----
-        elif event_type == "on_chat_model_stream":
-            chunk = event.get("data", {}).get("chunk", None)
-            if chunk and hasattr(chunk, "content") and chunk.content:
-                yield {
-                    "event": "token",
-                    "data": json.dumps({"token": chunk.content}, ensure_ascii=False),
-                }
-
-        # ---- 状态更新（包含 interrupt） ----
-        elif event_type == "on_chain_stream" or event_type == "values":
-            values = event.get("data", {}).get("values", event.get("data", {}))
-            if isinstance(values, dict):
-                # 保存最终 state
-                if name == "aggregator" or event_type == "values":
-                    final_state.update(values)
-
-                # 检查 interrupt
-                interrupt_list = values.get("__interrupt__")
-                if interrupt_list:
-                    for intr in interrupt_list:
-                        intr_val = intr.value if hasattr(intr, "value") else intr
-                        intr_type = intr_val.get("type", "")
-                        if intr_type == "fit_review":
-                            yield {
-                                "event": "interrupt",
-                                "data": json.dumps({
-                                    "type": "fit_review",
-                                    "fit_analysis": intr_val.get("fit_analysis", ""),
-                                    "fit_scores": extract_match_score(intr_val.get("fit_analysis", "")) if intr_val.get("fit_analysis") else None,
-                                    "similar_jds": intr_val.get("similar_jds", []),
-                                    "similar_questions": intr_val.get("similar_questions", []),
-                                    "question": intr_val.get("question", "契合度分析已完成，是否继续进行模拟面试？"),
-                                    "options": intr_val.get("options", []),
-                                }, ensure_ascii=False),
-                            }
-                        elif intr_type == "interview":
-                            yield {
-                                "event": "interrupt",
-                                "data": json.dumps({
-                                    "type": "interview",
-                                    "question": intr_val.get("question", ""),
-                                    "question_num": intr_val.get("question_num", 1),
-                                    "total": intr_val.get("total", 5),
-                                }, ensure_ascii=False),
-                            }
-
-    # ---- 最终结果 ----
-    if final_state and not final_state.get("__interrupt__"):
+        # ---- 无中断：完整执行结束 ----
         fit_analysis_text = final_state.get("jd_resume_analysis") or ""
         fit_scores = extract_match_score(fit_analysis_text) if fit_analysis_text else None
         token_usage = final_state.get("token_usage") or {}
@@ -199,7 +148,8 @@ async def _stream_agent(input_data: dict, is_resume: bool = False):
             }, ensure_ascii=False),
         }
 
-    await task  # 确保任务结束
+    except Exception as e:
+        yield {"event": "error", "data": json.dumps({"error": str(e)}, ensure_ascii=False)}
 
 
 @app.post("/chat/stream")
