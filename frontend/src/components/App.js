@@ -21,9 +21,11 @@ function App() {
     similarJds,
     similarQuestions,
     loading,
+    streaming,
     submit,
     decideInterview,
     reset,
+    streamReport,
   } = useAgent();
 
   const [resume, setResume] = useState('5年Java经验，Spring Cloud，高并发项目经验');
@@ -81,8 +83,8 @@ function App() {
       </header>
 
       <main className="app-main">
-        {/* 输入区：仅在空闲状态显示 */}
-        {status === 'idle' && (
+        {/* 输入区：仅在空闲状态且非 streaming 时显示 */}
+        {status === 'idle' && !streaming && (
           <ChatInput
             onSubmit={handleInitialSubmit}
             resume={resume}
@@ -97,8 +99,8 @@ function App() {
           />
         )}
 
-        {/* 对话/面试区 */}
-        {(status === 'fit_review' || status === 'interviewing' || status === 'finished') && (
+        {/* 对话/面试区（streaming 时也要显示） */}
+        {(streaming || status === 'fit_review' || status === 'interviewing' || status === 'finished') && (
           <div className="conversation-area">
             <div className="conversation-log">
               {conversation.map((msg, idx) => (
@@ -135,8 +137,18 @@ function App() {
               />
             )}
 
-            {/* 面试结束：显示契合度分析 + 报告 */}
-            {status === 'finished' && (
+            {/* 报告流式输出（生成中） */}
+            {streaming && streamReport && (
+              <div className="report-panel">
+                <h2>📊 正在生成报告...</h2>
+                <div className="report-content streaming-cursor">
+                  <pre style={{ whiteSpace: 'pre-wrap', fontFamily: 'inherit', margin: 0 }}>{streamReport}</pre>
+                </div>
+              </div>
+            )}
+
+            {/* 面试完成 */}
+            {(status === 'finished') && (
               <>
                 <FitAnalysis scores={fitScores} analysis={fitAnalysis} />
                 {report && <Report report={report} />}

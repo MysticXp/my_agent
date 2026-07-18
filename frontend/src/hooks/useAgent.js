@@ -1,5 +1,6 @@
-import { useState, useCallback } from 'react';
+import { useState, useCallback, useRef } from 'react';
 import { sendMessage } from '../api/client';
+import { streamChat } from '../api/streamClient';
 
 export const useAgent = () => {
   const [status, setStatus] = useState('idle'); // idle | interviewing | finished | error
@@ -13,20 +14,93 @@ export const useAgent = () => {
   const [similarJds, setSimilarJds] = useState([]);
   const [similarQuestions, setSimilarQuestions] = useState([]);
   const [loading, setLoading] = useState(false);
+  const [streaming, setStreaming] = useState(false);
+  const [streamReport, setStreamReport] = useState('');
+  const streamReportRef = useRef(''); // ref 版本，闭包安全
+  const abortRef = useRef(null);
 
-  // 启动面试或提交答案
+  // SSE 流式提交（优先使用）
+  const submitStream = useCallback(async (payload) => {
+    setLoading(true);
+    setStreaming(true);
+
+    if (payload.message) {
+      setConversation(prev => [...prev, { role: 'user', content: payload.message }]);
+    }
+    // answer 的消息由调用方（decideInterview / handleAnswerSubmit）自行记录
+
+    abortRef.current = streamChat('/chat/stream', payload, {
+      onToken: (token) => {
+        streamReportRef.current += token;
+        setStreamReport(streamReportRef.current);
+      },
+      onInterrupt: (data) => {
+        setStreamReport('');
+        streamReportRef.current = '';
+        setLoading(false);
+        setStreaming(false);
+        if (data.type === 'fit_review') {
+          setStatus('fit_review');
+          if (data.fit_analysis) setFitAnalysis(data.fit_analysis);
+          if (data.fit_scores) setFitScores(data.fit_scores);
+          if (data.similar_jds) setSimilarJds(data.similar_jds);
+          if (data.similar_questions) setSimilarQuestions(data.similar_questions);
+          setConversation(prev => [...prev, { role: 'assistant', content: data.question || '契合度分析已完成，是否继续模拟面试？' }]);
+        } else if (data.type === 'interview') {
+          setStatus('interviewing');
+          setCurrentQuestion(data.question);
+          setQuestionNum(data.question_num);
+          setTotalQuestions(data.total);
+          setConversation(prev => [...prev, { role: 'assistant', content: `Q${data.question_num}: ${data.question}` }]);
+        }
+      },
+      onDone: (data) => {
+        setLoading(false);
+        setStreaming(false);
+        const finalOutput = streamReportRef.current || data.output || '';
+        setStreamReport(''); // 清除流式预览，避免闪烁
+        streamReportRef.current = '';
+        setStatus('finished');
+        setReport({ ...data, output: finalOutput });
+        setFitScores(data.fit_scores || null);
+        setFitAnalysis(data.fit_analysis || null);
+        // feedback 追加到对话
+        if (data.feedback && data.feedback.length > 0) {
+          setConversation(prev => {
+            const existing = prev.map(m => m.content);
+            const newItems = data.feedback.filter(f => !existing.includes(f));
+            return [...prev, ...newItems.map(f => ({ role: 'assistant', content: f }))];
+          });
+        }
+        setCurrentQuestion(null);
+      },
+      onError: (err) => {
+        setStreamReport('');
+        streamReportRef.current = '';
+        setLoading(false);
+        setStreaming(false);
+        setStatus('error');
+        setConversation(prev => [...prev, { role: 'error', content: err }]);
+      },
+    });
+  }, []);
+
+  // 启动面试或提交答案（优先流式，回退同步）
   const submit = useCallback(async (payload) => {
+    const userMsg = payload.message || payload.answer;
+    if (userMsg) {
+      setConversation(prev => [...prev, { role: 'user', content: userMsg }]);
+    }
+
+    // 有 message 或 answer 就走流式（submitStream 自己管理 loading）
+    if (payload.message || payload.answer) {
+      submitStream(payload);
+      return;
+    }
+
+    // === 以下为同步回退（当前不会被走到，保留兼容） ===
     setLoading(true);
     try {
-      // 如果是首次，记录用户消息
-      if (payload.message) {
-        setConversation(prev => [...prev, { role: 'user', content: payload.message }]);
-      }
-      // 如果有答案，记录用户的回答
-      if (payload.answer) {
-        setConversation(prev => [...prev, { role: 'user', content: payload.answer }]);
-      }
-
       const data = await sendMessage(payload);
 
       if (data.status === 'fit_review') {
@@ -83,46 +157,19 @@ export const useAgent = () => {
     }
   }, []);
 
-  // 契合度审查：用户决定是否继续面试
-  const decideInterview = useCallback(async (decision) => {
-    setLoading(true);
-    try {
-      setConversation(prev => [...prev, { role: 'user', content: decision === 'continue' ? '继续面试' : '跳过面试' }]);
-      const data = await sendMessage({ answer: decision });
-
-      if (data.status === 'interviewing') {
-        setStatus('interviewing');
-        setCurrentQuestion(data.question);
-        setQuestionNum(data.question_num);
-        setTotalQuestions(data.total);
-        setConversation(prev => [...prev, { role: 'assistant', content: `Q${data.question_num}: ${data.question}` }]);
-      } else if (data.status === 'finished') {
-        setStatus('finished');
-        setReport(data);
-        if (data.fit_scores) setFitScores(data.fit_scores);
-        if (data.fit_analysis) setFitAnalysis(data.fit_analysis);
-        if (data.similar_jds) setSimilarJds(data.similar_jds);
-        if (data.similar_questions) setSimilarQuestions(data.similar_questions);
-        if (data.feedback) {
-          data.feedback.forEach(f => {
-            setConversation(prev => [...prev, { role: 'assistant', content: f }]);
-          });
-        }
-        if (data.output) {
-          setConversation(prev => [...prev, { role: 'assistant', content: data.output }]);
-        }
-        setCurrentQuestion(null);
-      }
-    } catch (error) {
-      setStatus('error');
-      setConversation(prev => [...prev, { role: 'error', content: error.message || '网络错误' }]);
-    } finally {
-      setLoading(false);
-    }
-  }, []);
+  // 契合度审查：用户决定是否继续面试（走 stream）
+  const decideInterview = useCallback((decision) => {
+    const display = decision === 'continue' ? '继续面试' : '跳过面试';
+    setConversation(prev => [...prev, { role: 'user', content: display }]);
+    submitStream({ answer: decision });
+  }, [submitStream]);
 
   // 重置状态
   const reset = useCallback(() => {
+    if (abortRef.current) {
+      abortRef.current.abort();
+      abortRef.current = null;
+    }
     setStatus('idle');
     setConversation([]);
     setCurrentQuestion(null);
@@ -134,6 +181,9 @@ export const useAgent = () => {
     setSimilarJds([]);
     setSimilarQuestions([]);
     setLoading(false);
+    setStreaming(false);
+    setStreamReport('');
+    streamReportRef.current = '';
   }, []);
 
   return {
@@ -148,6 +198,8 @@ export const useAgent = () => {
     similarJds,
     similarQuestions,
     loading,
+    streaming,
+    streamReport,
     submit,
     decideInterview,
     reset,

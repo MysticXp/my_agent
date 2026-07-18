@@ -224,9 +224,14 @@ class TestAggregatorNode:
 
     @patch("agent.nodes.ChatDeepSeek")
     def test_aggregator_fills_output(self, mock_deepseek):
-        """Aggregator 正确生成最终报告"""
+        """Aggregator 正确生成最终报告（stream 模式）"""
         instance = mock_deepseek.return_value
-        instance.invoke.return_value = mock_llm_response("最终求职报告内容")
+        # aggregator 现在用 stream() 而非 invoke()
+        class MockChunk:
+            def __init__(self, text):
+                self.content = text
+                self.response_metadata = {"token_usage": {"prompt_tokens": 10, "completion_tokens": 5}}
+        instance.stream.return_value = [MockChunk("最终求职报告内容")]
 
         state = make_state({
             "jd_resume_analysis": "分析结果",
