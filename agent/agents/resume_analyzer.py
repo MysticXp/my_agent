@@ -94,7 +94,6 @@ class ResumeAnalyzerAgent(BaseAgent):
             try:
                 # 检查是否已存在（用 jd_text 去重）
                 jd_text = state["job_description"]
-                existing = save_jd.__module__ and True
                 from tools.jd_store import get_all_jds
                 existing_jds = get_all_jds()
                 is_duplicate = any(
@@ -104,7 +103,6 @@ class ResumeAnalyzerAgent(BaseAgent):
                     scores = extract_match_score(state["jd_resume_analysis"]) if state["jd_resume_analysis"] else {}
                     save_jd(
                         jd_text=jd_text,
-                        resume_text=state.get("resume_text", ""),
                         fit_score=scores.get("total_score", 0),
                         company=state.get("company") or "",
                         role=state.get("role") or "",

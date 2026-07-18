@@ -86,14 +86,13 @@ def _extract_jd_meta(jd_text: str) -> dict:
     }
 
 
-def save_jd(jd_text: str, resume_text: str = "", fit_score: int = 0,
+def save_jd(jd_text: str, fit_score: int = 0,
             company: str = "", role: str = "") -> dict:
     """
     保存一份 JD 到历史库（带自动元数据提取）。
 
     参数:
         jd_text: JD 全文
-        resume_text: 当时的简历（用于记录上下文）
         fit_score: 契合度评分（如有）
         company: 用户输入的公司名（覆盖LLM提取值）
         role: 用户输入的岗位名（覆盖LLM提取值）
@@ -115,7 +114,6 @@ def save_jd(jd_text: str, resume_text: str = "", fit_score: int = 0,
         "id": f"jd_{datetime.now().strftime('%Y%m%d_%H%M%S_%f')}",
         "created_at": datetime.now().isoformat(),
         "jd_text": jd_text[:5000],          # 保留全文（上限5000字符）
-        "resume_snapshot": resume_text[:500] if resume_text else "",
         "fit_score": fit_score,
         "meta": meta,
     }
