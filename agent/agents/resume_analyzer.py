@@ -22,6 +22,7 @@ from tools.jd_resume_analyzer import (
 )
 from tools.jd_retriever import search_similar_jds, build_rag_context
 from tools.jd_store import save_jd
+from tools.cache import get_cache
 
 
 class ResumeAnalyzerAgent(BaseAgent):
@@ -75,20 +76,28 @@ class ResumeAnalyzerAgent(BaseAgent):
             state["similar_jds"] = state.get("similar_jds", [])
             state["rag_context"] = ""
 
-        # === 执行分析（核心逻辑） ===
-        try:
-            result = analyze_jd_resume_fit(
-                job_description=jd,
-                resume_text=resume,
-                llm=self._get_llm(),  # 注入 agent 自己的 LLM
-            )
-            state["jd_resume_analysis"] = result
-            print(f"[{self.name}] 分析完成: {len(result)} 字符")
-        except Exception as e:
-            print(f"[{self.name}] 分析失败: {e}")
-            # 失败了也要占位，否则 fit_review_node 无法触发 HITL
-            state["jd_resume_analysis"] = f"（契合度分析暂不可用: {e}）"
-
+        # === 语义缓存：相同的 JD+简历组合不重复调 LLM ===
+        cache = get_cache()
+        cached = cache.lookup(jd, resume)
+        if cached:
+            print(f"[{self.name}] 缓存命中 (相似度={cached['similarity']}), 跳过 LLM 调用")
+            state["jd_resume_analysis"] = cached["result"]
+        else:
+            # === 执行分析（核心逻辑） ===
+            try:
+                result = analyze_jd_resume_fit(
+                    job_description=jd,
+                    resume_text=resume,
+                    llm=self._get_llm(),  # 注入 agent 自己的 LLM
+                )
+                state["jd_resume_analysis"] = result
+                print(f"[{self.name}] 分析完成: {len(result)} 字符")
+                # 缓存结果
+                cache.store(jd, resume, result, agent=self.name)
+            except Exception as e:
+                print(f"[{self.name}] 分析失败: {e}")
+                # 失败了也要占位，否则 fit_review_node 无法触发 HITL
+                state["jd_resume_analysis"] = f"（契合度分析暂不可用: {e}）"
         # === 自动保存 JD 到历史库（独立的 try） ===
         if state.get("jd_resume_analysis") and state.get("job_description"):
             try:
