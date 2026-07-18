@@ -40,7 +40,7 @@ from agent.token_tracker import token_tracker
 from tools.resume_optimizer import optimize_resume
 from tools.jd_resume_analyzer import extract_match_score
 from tools.jd_retriever import search_similar_jds, build_rag_context
-from tools.jd_store import save_jd as save_jd_to_store
+from tools.jd_store import save_jd as save_jd_to_store, get_all_jds
 from tools.question_store import get_questions, build_avoid_context
 
 # ===== Agent 实例（全局单例，只初始化一次） =====
@@ -94,20 +94,22 @@ def planner_node(state: JobState) -> JobState:
 
     llm = get_llm(temperature=0.1)
 
-    # RAG: 检索历史相似 JD（优先用 JD 文本，没有 JD 则用简历文本）
+    # RAG: 仅当用户未提供JD时检索历史相似JD（用户给了JD就以它为准，不查RAG）
     rag_context = ""
-    rag_query = state.get("job_description") or state.get("resume_text") or ""
-    if rag_query.strip():
-        try:
-            similar = search_similar_jds(rag_query, top_k=3)
-            state["similar_jds"] = similar
-            rag_context = build_rag_context(similar)
-            state["rag_context"] = rag_context
-            print(f"[Planner] RAG检索到 {len(similar)} 条相似JD (query来源={'JD' if state.get('job_description') else '简历'})")
-        except Exception as e:
-            print(f"[Planner] RAG检索失败（非致命）: {e}")
-            state["similar_jds"] = []
-            state["rag_context"] = ""
+    has_jd = bool(state.get("job_description"))
+    if not has_jd:
+        rag_query = state.get("resume_text", "")
+        if rag_query.strip():
+            try:
+                similar = search_similar_jds(rag_query, top_k=3)
+                state["similar_jds"] = similar
+                rag_context = build_rag_context(similar)
+                state["rag_context"] = rag_context
+                print(f"[Planner] RAG检索到 {len(similar)} 条相似JD (无JD，基于简历)")
+            except Exception as e:
+                print(f"[Planner] RAG检索失败（非致命）: {e}")
+                state["similar_jds"] = []
+                state["rag_context"] = ""
 
     # 检索历史面试题（按岗位/公司精确匹配，无需向量检索）
     similar_questions = []
@@ -132,17 +134,6 @@ def planner_node(state: JobState) -> JobState:
             jd_text = f"用户未提供具体JD，但向量库检索到以下相似历史JD可供参考：\n{rag_context}\n请基于最匹配的历史JD为用户提供分析建议。"
         else:
             jd_text = "用户未提供具体JD，请询问。"
-    if rag_query.strip():
-        try:
-            similar = search_similar_jds(rag_query, top_k=3)
-            state["similar_jds"] = similar
-            rag_context = build_rag_context(similar)
-            state["rag_context"] = rag_context
-            print(f"[Planner] RAG检索到 {len(similar)} 条相似JD (query来源={'JD' if state.get('job_description') else '简历'})")
-        except Exception as e:
-            print(f"[Planner] RAG检索失败（非致命）: {e}")
-            state["similar_jds"] = []
-            state["rag_context"] = ""
 
     prompt_text = PLANNER_PROMPT.format(
         user_input=state["user_input"],
@@ -302,26 +293,28 @@ def aggregator_node(state: JobState) -> JobState:
         state["status"] = "finished"
         print(f"[Aggregator] 报告生成完成，长度={len(response.content)}")
 
-        # RAG: 自动保存 JD 到历史库
+        # 自动保存 JD 到历史库（重复检查）
         if state.get("job_description"):
             try:
-                # 提取契合度评分（如有）
-                fit_text = state.get("jd_resume_analysis", "")
-                if fit_text:
-                    scores = extract_match_score(fit_text)
-                    fit_score = scores.get("total_score", 0)
-                else:
-                    fit_score = 0
-
-                save_jd_to_store(
-                    jd_text=state["job_description"],
-                    resume_text=state.get("resume_text", ""),
-                    fit_score=fit_score,
-                    company=state.get("company") or "",
-                    role=state.get("role") or "",
+                jd_text = state["job_description"]
+                # 检查是否已存在
+                existing_jds = save_jd_to_store.__module__ and get_all_jds()
+                is_duplicate = any(
+                    e.get("jd_text", "") == jd_text for e in (existing_jds or [])
                 )
-                print("[Aggregator] JD已自动保存到历史库"
-                      + (f" (公司={state.get('company')}, 岗位={state.get('role')})" if state.get("company") or state.get("role") else ""))
+                if not is_duplicate:
+                    fit_text = state.get("jd_resume_analysis", "")
+                    fit_score = extract_match_score(fit_text).get("total_score", 0) if fit_text else 0
+                    save_jd_to_store(
+                        jd_text=jd_text,
+                        resume_text=state.get("resume_text", ""),
+                        fit_score=fit_score,
+                        company=state.get("company") or "",
+                        role=state.get("role") or "",
+                    )
+                    print(f"[Aggregator] JD已保存到历史库")
+                else:
+                    print(f"[Aggregator] JD已存在，跳过保存")
             except Exception as e:
                 print(f"[Aggregator] JD保存失败（非致命）: {e}")
 
