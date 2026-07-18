@@ -104,7 +104,6 @@ class ResumeAnalyzerAgent(BaseAgent):
             try:
                 save_jd(
                     jd_text=state["job_description"],
-                    fit_score=extract_match_score(state["jd_resume_analysis"]).get("total_score", 0),
                     company=state.get("company") or "",
                     role=state.get("role") or "",
                 )
