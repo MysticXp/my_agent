@@ -65,15 +65,16 @@ class ResumeAnalyzerAgent(BaseAgent):
 
         print(f"[{self.name}] 开始分析 JD-简历契合度 (JD长度={len(jd)}, 简历长度={len(resume)})")
 
-        # === RAG 检索相似 JD（独立 try，不影响主分析流程） ===
-        try:
-            similar = search_similar_jds(jd, top_k=3)
-            state["similar_jds"] = similar
-            state["rag_context"] = build_rag_context(similar)
-        except Exception as e:
-            print(f"[{self.name}] RAG 检索失败（非致命）: {e}")
-            state["similar_jds"] = state.get("similar_jds", [])
-            state["rag_context"] = ""
+        # === RAG 检索：仅当用户没提供 JD 才用 RAG（用户给了 JD 就以它为准） ===
+        if not state.get("job_description"):
+            try:
+                similar = search_similar_jds(jd, top_k=3)
+                state["similar_jds"] = similar
+                state["rag_context"] = build_rag_context(similar)
+            except Exception as e:
+                print(f"[{self.name}] RAG 检索失败（非致命）: {e}")
+                state["similar_jds"] = state.get("similar_jds", [])
+                state["rag_context"] = ""
 
         # === 执行分析（核心逻辑） ===
         try:
@@ -86,21 +87,28 @@ class ResumeAnalyzerAgent(BaseAgent):
             print(f"[{self.name}] 分析完成: {len(result)} 字符")
         except Exception as e:
             print(f"[{self.name}] 分析失败: {e}")
-            # 失败了也要占位，否则 fit_review_node 无法触发 HITL
             state["jd_resume_analysis"] = f"（契合度分析暂不可用: {e}）"
 
-        # === 自动保存 JD 到历史库（独立的 try） ===
+        # === 保存 JD 到历史库：仅当用户提供了 JD 且库中没有重复 ===
         if state.get("jd_resume_analysis") and state.get("job_description"):
             try:
-                scores = extract_match_score(state["jd_resume_analysis"]) if state["jd_resume_analysis"] else {}
-                save_jd(
-                    jd_text=state["job_description"],
-                    resume_text=state.get("resume_text", ""),
-                    fit_score=scores.get("total_score", 0),
-                    company=state.get("company") or "",
-                    role=state.get("role") or "",
+                # 检查是否已存在（用 jd_text 去重）
+                jd_text = state["job_description"]
+                from tools.jd_store import get_all_jds
+                existing_jds = get_all_jds()
+                is_duplicate = any(
+                    e.get("jd_text", "") == jd_text for e in existing_jds
                 )
-                print(f"[{self.name}] JD 已保存到历史库")
+                if not is_duplicate:
+                    scores = extract_match_score(state["jd_resume_analysis"]) if state["jd_resume_analysis"] else {}
+                    save_jd(
+                        jd_text=jd_text,
+                        company=state.get("company") or "",
+                        role=state.get("role") or "",
+                    )
+                    print(f"[{self.name}] JD 已保存到历史库")
+                else:
+                    print(f"[{self.name}] JD 已存在，跳过保存")
             except Exception as e:
                 print(f"[{self.name}] JD 保存失败（非致命）: {e}")
 

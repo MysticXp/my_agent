@@ -1,4 +1,0 @@
-{"agent": "Planner", "prompt_tokens": 100, "completion_tokens": 50, "total_tokens": 150, "cost_cny": 0.00015, "timestamp": "2026-07-11T09:32:45.672937", "model": "deepseek-chat"}
-{"agent": "Planner", "prompt_tokens": 100, "completion_tokens": 50, "total_tokens": 150, "cost_cny": 0.00015, "timestamp": "2026-07-11T09:32:45.676612", "model": "deepseek-chat"}
-{"agent": "Planner", "prompt_tokens": 100, "completion_tokens": 50, "total_tokens": 150, "cost_cny": 0.00015, "timestamp": "2026-07-11T09:32:45.691621", "model": "deepseek-chat"}
-{"agent": "Aggregator", "prompt_tokens": 100, "completion_tokens": 50, "total_tokens": 150, "cost_cny": 0.00015, "timestamp": "2026-07-11T09:33:34.095517", "model": "deepseek-chat"}

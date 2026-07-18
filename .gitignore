@@ -2,3 +2,12 @@
 **/.env
 __pycache__/
 *.pyc
+
+# Runtime data (auto-generated, not committed)
+data/vectors/
+data/jd_history.json
+data/question_history.json
+data/token_usage.jsonl
+data/eval/
+data/models/
+data/sample_resume.txt

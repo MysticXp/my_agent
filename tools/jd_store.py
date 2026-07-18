@@ -86,15 +86,13 @@ def _extract_jd_meta(jd_text: str) -> dict:
     }
 
 
-def save_jd(jd_text: str, resume_text: str = "", fit_score: int = 0,
+def save_jd(jd_text: str, 
             company: str = "", role: str = "") -> dict:
     """
     保存一份 JD 到历史库（带自动元数据提取）。
 
     参数:
         jd_text: JD 全文
-        resume_text: 当时的简历（用于记录上下文）
-        fit_score: 契合度评分（如有）
         company: 用户输入的公司名（覆盖LLM提取值）
         role: 用户输入的岗位名（覆盖LLM提取值）
 
@@ -102,6 +100,12 @@ def save_jd(jd_text: str, resume_text: str = "", fit_score: int = 0,
         保存的记录（含 id、meta、时间戳）
     """
     store = _ensure_store()
+
+    # 去重：同样的 jd_text 不再写入
+    for existing in store.get("jds", []):
+        if existing.get("jd_text", "") == jd_text:
+            print(f"[JDStore] 跳过重复JD: {jd_text[:60]}...")
+            return existing
 
     meta = _extract_jd_meta(jd_text)
 
@@ -115,8 +119,6 @@ def save_jd(jd_text: str, resume_text: str = "", fit_score: int = 0,
         "id": f"jd_{datetime.now().strftime('%Y%m%d_%H%M%S_%f')}",
         "created_at": datetime.now().isoformat(),
         "jd_text": jd_text[:5000],          # 保留全文（上限5000字符）
-        "resume_snapshot": resume_text[:500] if resume_text else "",
-        "fit_score": fit_score,
         "meta": meta,
     }
 
@@ -132,7 +134,6 @@ def save_jd(jd_text: str, resume_text: str = "", fit_score: int = 0,
             "role": meta.get("role", ""),
             "level": meta.get("level", ""),
             "tech_stack": meta.get("tech_stack", []),
-            "fit_score": fit_score,
             "one_line": meta.get("one_line_summary", ""),
         })
     except Exception as e:
@@ -156,7 +157,6 @@ def get_all_jds() -> list:
             "level": meta.get("level", ""),
             "location": meta.get("location", ""),
             "tech_stack": meta.get("tech_stack", []),
-            "fit_score": jd.get("fit_score", 0),
             "one_line": meta.get("one_line_summary", ""),
         })
     return summaries
