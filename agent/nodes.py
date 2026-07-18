@@ -38,9 +38,7 @@ from agent.token_tracker import token_tracker
 
 # ===== 工具函数（Agent 内部会用到） =====
 from tools.resume_optimizer import optimize_resume
-from tools.jd_resume_analyzer import extract_match_score
 from tools.jd_retriever import search_similar_jds, build_rag_context
-from tools.jd_store import save_jd as save_jd_to_store, get_all_jds
 from tools.question_store import get_questions, build_avoid_context
 
 # ===== Agent 实例（全局单例，只初始化一次） =====
@@ -292,31 +290,6 @@ def aggregator_node(state: JobState) -> JobState:
         state["final_output"] = response.content
         state["status"] = "finished"
         print(f"[Aggregator] 报告生成完成，长度={len(response.content)}")
-
-        # 自动保存 JD 到历史库（重复检查）
-        if state.get("job_description"):
-            try:
-                jd_text = state["job_description"]
-                # 检查是否已存在
-                existing_jds = save_jd_to_store.__module__ and get_all_jds()
-                is_duplicate = any(
-                    e.get("jd_text", "") == jd_text for e in (existing_jds or [])
-                )
-                if not is_duplicate:
-                    fit_text = state.get("jd_resume_analysis", "")
-                    fit_score = extract_match_score(fit_text).get("total_score", 0) if fit_text else 0
-                    save_jd_to_store(
-                        jd_text=jd_text,
-                        resume_text=state.get("resume_text", ""),
-                        fit_score=fit_score,
-                        company=state.get("company") or "",
-                        role=state.get("role") or "",
-                    )
-                    print(f"[Aggregator] JD已保存到历史库")
-                else:
-                    print(f"[Aggregator] JD已存在，跳过保存")
-            except Exception as e:
-                print(f"[Aggregator] JD保存失败（非致命）: {e}")
 
         # 汇总 Token 消耗到 state（方便前端展示）
         try:
