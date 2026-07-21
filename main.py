@@ -94,23 +94,29 @@ async def _stream_agent(input_data: dict, is_resume: bool = False):
                 state["interview_requested"] = True
             agen = agent.astream_events(state, config=config, version="v2")
 
+        streaming_node = None  # 当前正在流式输出的节点
+
         async for event in agen:
             evt = event["event"]
             name = event.get("name", "")
 
             # ---- 节点开始/结束 ----
             if evt == "on_chain_start" and name in NODE_LABELS:
-                yield {"event": "node_start", "data": json.dumps(
-                    {"node": name, "label": NODE_LABELS[name]}, ensure_ascii=False)}
+                streaming_node = name
+                if name == "aggregator":
+                    yield {"event": "node_start", "data": json.dumps(
+                        {"node": name, "label": NODE_LABELS[name]}, ensure_ascii=False)}
                 continue
 
             if evt == "on_chain_end" and name in NODE_LABELS:
-                yield {"event": "node_end", "data": json.dumps(
-                    {"node": name}, ensure_ascii=False)}
+                streaming_node = None
+                if name == "aggregator":
+                    yield {"event": "node_end", "data": json.dumps(
+                        {"node": name}, ensure_ascii=False)}
                 continue
 
-            # ---- 逐 token 流（来自 aggregator 的 stream() 调用） ----
-            if evt == "on_chat_model_stream":
+            # ---- 逐 token 流（仅 aggregator 节点输出到前端，跳过 planner/executor 的 JSON plan） ----
+            if evt == "on_chat_model_stream" and streaming_node == "aggregator":
                 chunk = event["data"].get("chunk")
                 if chunk and hasattr(chunk, "content") and chunk.content:
                     yield {"event": "token", "data": json.dumps(
