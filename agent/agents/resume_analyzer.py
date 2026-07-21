@@ -1,15 +1,5 @@
 # agent/agents/resume_analyzer.py
 # ResumeAnalyzerAgent — JD-简历契合度分析专用 Agent
-#
-# 面试话术：
-# "ResumeAnalyzer 负责 JD 与简历的深度对比分析，temperature 设 0.2
-#  因为分析任务需要客观一致，不需要创造性。
-#  如果分析结果不准确，我只需要调这个 Agent 的 prompt，
-#  不会影响其他功能。"
-#
-# 面试考点：
-# - 知道 temperature 的语义（低 → 确定性，高 → 创造性）
-# - 知道把相似任务归到同一个 Agent 可以减少 prompt 膨胀
 
 from typing import Any
 
@@ -23,7 +13,6 @@ from tools.jd_resume_analyzer import (
 from tools.jd_retriever import search_similar_jds, build_rag_context
 from tools.jd_store import save_jd
 from tools.cache import get_cache
-
 
 class ResumeAnalyzerAgent(BaseAgent):
     """JD-简历契合度分析 Agent

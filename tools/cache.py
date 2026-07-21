@@ -1,14 +1,5 @@
 # tools/cache.py
 # 语义缓存：对 LLM 调用结果做 embedding 相似度缓存
-# 面试话术："我给 JD-简历分析加了一层语义缓存，命中率约40%，
-#  同样的简历投不同公司时，相似JD也能复用分析结果，
-#  每次命中省 ~2500 tokens，约 ¥0.003。"
-#
-# 工作原理：
-# 1. 计算 (jd_text + resume_text) 的 embedding 向量
-# 2. 与已缓存的 entry 做余弦相似度
-# 3. 最高分 > 阈值 → 直接返回缓存结果
-# 4. 否则调 LLM，结果存入缓存
 
 import os
 import json
@@ -22,12 +13,10 @@ CACHE_DIR = Path(__file__).parent.parent / "data" / "cache"
 CACHE_FILE = CACHE_DIR / "semantic_cache.json"
 SIMILARITY_THRESHOLD = 0.97  # 语义相似度阈值（0-1），越高越严格
 
-
 def _get_embedding(text: str) -> np.ndarray:
     """复用项目的 BGE embedding 模型生成向量"""
     from tools.vector_store import _get_model, embed_text
     return embed_text(text)
-
 
 class SemanticCache:
     """语义缓存：基于 embedding 相似度的 LLM 结果缓存
@@ -137,10 +126,8 @@ class SemanticCache:
             "agents": list(set(e.get("agent", "?") for e in self._entries)),
         }
 
-
 # 全局单例
 _cache: Optional[SemanticCache] = None
-
 
 def get_cache() -> SemanticCache:
     global _cache

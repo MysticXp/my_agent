@@ -1,11 +1,3 @@
-# agent/nodes.py
-# 求职Agent的LangGraph节点函数（规划、执行、汇总、判断）
-# 注意：所有 print 使用纯文本，避免 Windows GBK 编码崩溃
-#
-# 2026-07 重构：引入 Multi-Agent 架构 + Token 成本追踪
-# - executor_node 现在使用 ResumeAnalyzerAgent / QuestionGeneratorAgent
-# - interviewer_node 现在使用 InterviewEvaluatorAgent 评估回答
-# - 所有 LLM 调用自动追踪 token 成本
 
 import os
 import json
@@ -13,10 +5,8 @@ import re
 from typing import Dict, Any, Optional
 from langgraph.types import interrupt
 
-# LangChain 核心
 from langchain_deepseek import ChatDeepSeek
 
-# 导入状态和 Prompt
 from agent.state import JobState
 from agent.prompts import (
     PLANNER_PROMPT,
@@ -25,8 +15,6 @@ from agent.prompts import (
     SKILL_EXTRACTION_PROMPT
 )
 
-# ===== Multi-Agent 专用 Agent =====
-# 每个 Agent 有自己独立的 LLM 实例、temperature 和 system prompt
 from agent.agents import (
     ResumeAnalyzerAgent,
     QuestionGeneratorAgent,
@@ -46,7 +34,6 @@ _resume_analyzer = None
 _question_generator = None
 _interview_evaluator = None
 
-
 def _get_resume_analyzer() -> ResumeAnalyzerAgent:
     global _resume_analyzer
     if _resume_analyzer is None:
@@ -54,14 +41,12 @@ def _get_resume_analyzer() -> ResumeAnalyzerAgent:
         _resume_analyzer = ResumeAnalyzerAgent()
     return _resume_analyzer
 
-
 def _get_question_generator() -> QuestionGeneratorAgent:
     global _question_generator
     if _question_generator is None:
         print("[Init] 初始化 QuestionGeneratorAgent (temperature=0.7)")
         _question_generator = QuestionGeneratorAgent()
     return _question_generator
-
 
 def _get_interview_evaluator() -> InterviewEvaluatorAgent:
     global _interview_evaluator
@@ -200,8 +185,6 @@ def executor_node(state: JobState) -> JobState:
     try:
         if action == "analyze_jd_resume_fit":
             # === 使用 ResumeAnalyzerAgent（Multi-Agent 架构） ===
-            # 面试话术："我把 JD-简历分析交给专门的 ResumeAnalyzer，它有自己的 LLM 实例
-            #  和低 temperature 配置，保证分析结果的稳定性。"
             agent = _get_resume_analyzer()
             state = agent.run(state, **params)
             result = state.get("jd_resume_analysis", "")
@@ -225,8 +208,6 @@ def executor_node(state: JobState) -> JobState:
 
         elif action == "generate_questions":
             # === 使用 QuestionGeneratorAgent（Multi-Agent 架构） ===
-            # 面试话术："QuestionGenerator 有高 temperature 配置保证题目多样性，
-            #  自动查询历史题库做避重。"
             agent = _get_question_generator()
             state = agent.run(state, **params)
             result = "已生成面试题"
@@ -302,7 +283,7 @@ def aggregator_node(state: JobState) -> JobState:
         state["status"] = "finished"
         print(f"[Aggregator] 报告生成完成，长度={len(full_content)}")
 
-        # 汇总 Token 消耗到 state（方便前端展示）
+        # 汇总 Token 消耗到 state
         try:
             state["token_usage"] = token_tracker.summary()
             token_tracker.save_to_file("data/token_usage.jsonl")
@@ -360,10 +341,6 @@ def fit_review_node(state: JobState) -> JobState:
 
     return state
 
-
-# =========================================================
-# 6. 面试官节点（Interviewer Node）
-# =========================================================
 def interviewer_node(state: JobState) -> JobState:
     """面试官节点：支持中断等待用户回答"""
     # 0. 保镖检查
@@ -459,7 +436,6 @@ def should_continue_from_fit_review(state: JobState) -> str:
     print("[Router] 用户继续面试，进入面试节点")
     return "continue"  # 进入 interviewer
 
-
 def should_continue(state: JobState) -> str:
     """决定执行器的下一步"""
     if state.get("error"):
@@ -477,7 +453,6 @@ def should_continue(state: JobState) -> str:
     print(f"[Router] 继续执行下一步 (步骤 {state['current_step']+1})")
     return "continue"
 
-
 def should_continue_to_interview(state: JobState) -> str:
     """规划执行完后，判断是否进入面试"""
     if state.get("error"):
@@ -485,7 +460,6 @@ def should_continue_to_interview(state: JobState) -> str:
     if state.get("job_description") and state.get("resume_text"):
         return "interview"
     return "finish"
-
 
 def should_continue_interview(state: JobState) -> str:
     """面试过程中判断是否继续下一题"""

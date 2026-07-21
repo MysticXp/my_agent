@@ -1,14 +1,6 @@
 # agent/agents/question_generator.py
 # QuestionGeneratorAgent — 面试题生成专用 Agent
 #
-# 面试话术：
-# "QuestionGenerator 负责根据 JD 和简历生成定制面试题，
-#  temperature 设 0.7 因为它需要一定的创造性来出有意思的题。
-#  它还会自动查询历史题库做避重，不会重复出相同的题。"
-#
-# 面试考点：
-# - 不同任务需要不同 temperature：分析低、生成高
-# - 历史避重是 RAG 的典型应用场景
 
 from typing import Any
 
@@ -17,7 +9,6 @@ from agent.state import JobState
 
 from tools.interview import generate_interview_questions
 from tools.question_store import save_questions, get_questions, build_avoid_context, get_all_roles
-
 
 class QuestionGeneratorAgent(BaseAgent):
     """面试题生成 Agent

@@ -11,3 +11,4 @@ data/token_usage.jsonl
 data/eval/
 data/models/
 data/sample_resume.txt
+data/cache/

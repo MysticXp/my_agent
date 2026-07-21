@@ -5,7 +5,6 @@ import os
 import re
 from langchain_deepseek import ChatDeepSeek
 
-
 def _get_llm(temperature: float = 0.7):
     """获取 DeepSeek LLM 实例"""
     return ChatDeepSeek(
@@ -15,7 +14,6 @@ def _get_llm(temperature: float = 0.7):
         temperature=temperature,
         max_tokens=4096,
     )
-
 
 def generate_interview_questions(
     job_title: str,
