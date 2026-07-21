@@ -16,6 +16,7 @@ export const useAgent = () => {
   const [loading, setLoading] = useState(false);
   const [streaming, setStreaming] = useState(false);
   const [streamReport, setStreamReport] = useState('');
+  const [interviewAvailable, setInterviewAvailable] = useState(false);
   const streamReportRef = useRef(''); // ref 版本，闭包安全
   const abortRef = useRef(null);
 
@@ -64,7 +65,7 @@ export const useAgent = () => {
         setReport({ ...data, output: finalOutput });
         setFitScores(data.fit_scores || null);
         setFitAnalysis(data.fit_analysis || null);
-        // feedback 追加到对话
+        setInterviewAvailable(data.interview_available || false);
         if (data.feedback && data.feedback.length > 0) {
           setConversation(prev => {
             const existing = prev.map(m => m.content);
@@ -164,6 +165,19 @@ export const useAgent = () => {
     submitStream({ answer: decision });
   }, [submitStream]);
 
+  // 用户看完报告后请求开始模拟面试
+  const startInterview = useCallback((params = {}) => {
+    setConversation(prev => [...prev, { role: 'user', content: '开始模拟面试' }]);
+    submitStream({
+      interview_requested: true,
+      resume: params.resume || '',
+      job_description: params.jd || '',
+      company: params.company || '',
+      role: params.role || '',
+      message: '开始模拟面试',
+    });
+  }, [submitStream]);
+
   // 重置状态
   const reset = useCallback(() => {
     if (abortRef.current) {
@@ -184,6 +198,7 @@ export const useAgent = () => {
     setStreaming(false);
     setStreamReport('');
     streamReportRef.current = '';
+    setInterviewAvailable(false);
   }, []);
 
   return {
@@ -200,8 +215,10 @@ export const useAgent = () => {
     loading,
     streaming,
     streamReport,
+    interviewAvailable,
     submit,
     decideInterview,
+    startInterview,
     reset,
   };
 };

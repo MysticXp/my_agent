@@ -83,13 +83,16 @@ async def _stream_agent(input_data: dict, is_resume: bool = False):
                 config=config, version="v2",
             )
         else:
-            agen = agent.astream_events(create_initial_state(
-                user_input=input_data["message"],
+            state = create_initial_state(
+                user_input=input_data.get("message", "分析简历"),
                 resume=input_data.get("resume"),
                 job_description=input_data.get("job_description"),
                 company=input_data.get("company"),
                 role=input_data.get("role"),
-            ), config=config, version="v2")
+            )
+            if input_data.get("interview_requested"):
+                state["interview_requested"] = True
+            agen = agent.astream_events(state, config=config, version="v2")
 
         async for event in agen:
             evt = event["event"]
@@ -152,6 +155,7 @@ async def _stream_agent(input_data: dict, is_resume: bool = False):
 
         # ---- 完成 ----
         fa = final_state.get("jd_resume_analysis") or ""
+        is_interview = input_data.get("interview_requested", False)
         yield {"event": "done", "data": json.dumps({
             "status": "finished",
             "output": final_state.get("final_output") or "分析完成",
@@ -161,6 +165,7 @@ async def _stream_agent(input_data: dict, is_resume: bool = False):
             "similar_jds": final_state.get("similar_jds") or [],
             "similar_questions": final_state.get("similar_questions") or [],
             "token_usage": final_state.get("token_usage") or {},
+            "interview_available": not is_interview,
         }, ensure_ascii=False)}
 
     except Exception as e:

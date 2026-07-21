@@ -467,7 +467,10 @@ def should_continue(state: JobState) -> str:
         return "error"
 
     if state["status"] == "finished":
-        print("[Router] 所有步骤完成，进入面试节点")
+        print("[Router] 所有步骤完成")
+        if state.get("interview_requested"):
+            print("[Router] 用户请求面试，跳转到 fit_review")
+            return "interview"
         return "finish"
 
     if state["current_step"] >= len(state["plan"]):

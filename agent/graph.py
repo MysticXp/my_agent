@@ -32,18 +32,20 @@ def build_job_agent():
     workflow.set_entry_point("planner")
     workflow.add_edge("planner", "executor")
 
-    # executor 循环完成后 → fit_review
+    # executor 循环完成后 → aggregator（直接出报告，不再中断等用户）
+    # 如果 interview_requested，则路由到 fit_review 进入面试流程
     workflow.add_conditional_edges(
         "executor",
         should_continue,
         {
             "continue": "executor",
-            "finish": "fit_review",
+            "finish": "aggregator",
+            "interview": "fit_review",
             "error": END
         }
     )
 
-    # fit_review → 用户选择：继续面试 or 跳过
+    # fit_review → 用户选择：继续面试 or 跳过（仅在 interview_requested 时触发）
     workflow.add_conditional_edges(
         "fit_review",
         should_continue_from_fit_review,

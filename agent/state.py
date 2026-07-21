@@ -85,6 +85,7 @@ class JobState(TypedDict):
     interview_complete: bool            # 是否所有题目都问完了
     pending_question: Optional[str]     # 当前正在等待回答的问题
     skip_interview: bool                # 用户是否选择跳过模拟面试
+    interview_requested: bool            # 用户主动请求模拟面试（报告看完后点击按钮）
 
     # ---------- 控制流 ----------
     status: str
@@ -181,7 +182,8 @@ def create_initial_state(
         interview_complete=False,
         pending_question=None,
         skip_interview=False,
-        
+        interview_requested=False,
+
         # RAG
         similar_jds=[],
         rag_context="",

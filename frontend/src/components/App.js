@@ -24,8 +24,10 @@ function App() {
     streaming,
     submit,
     decideInterview,
+    startInterview,
     reset,
     streamReport,
+    interviewAvailable,
   } = useAgent();
 
   const [resume, setResume] = useState('5年Java经验，Spring Cloud，高并发项目经验');
@@ -70,6 +72,13 @@ function App() {
   const handleAnswerSubmit = (answer) => {
     if (!answer.trim()) return;
     submit({ answer });
+  };
+
+  // 看完报告后开始面试
+  const handleStartInterview = () => {
+    startInterview({
+      resume, jd, company, role,
+    });
   };
 
   return (
@@ -152,6 +161,21 @@ function App() {
               <>
                 <FitAnalysis scores={fitScores} analysis={fitAnalysis} />
                 {report && <Report report={report} />}
+                {interviewAvailable && !streaming && (
+                  <div style={{ textAlign: 'center', margin: '20px 0' }}>
+                    <button onClick={handleStartInterview}
+                      style={{ padding: '14px 40px', fontSize: '1.05rem',
+                        background: 'linear-gradient(135deg, #7c3aed, #6d28d9)',
+                        color: 'white', border: 'none', borderRadius: '12px',
+                        fontWeight: 700, cursor: 'pointer', display: 'inline-block',
+                        transition: 'all 0.2s', boxShadow: '0 4px 16px rgba(124,58,237,0.3)' }}>
+                      🎯 开始模拟面试
+                    </button>
+                    <p style={{ color: '#6b7280', fontSize: '0.85rem', marginTop: 8 }}>
+                      将根据你的简历和目标岗位，生成针对性面试题
+                    </p>
+                  </div>
+                )}
               </>
             )}
           </div>
