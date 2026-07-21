@@ -1,15 +1,6 @@
 # agent/token_tracker.py
 # Token 成本追踪系统（生产级）
 #
-# 面试话术：
-# "我们在生产环境遇到了 token 成本失控的问题，所以我实现了这套追踪系统。
-#  它让我能精确知道每次对话花了多少钱，哪类任务最贵，
-#  也为后续的缓存策略和模型路由提供了数据支撑。"
-#
-# 面试考点：
-# - 知道 token 计费模型（输入 vs 输出价格不同！这是常见坑）
-# - 知道 DeepSeek 的价格（面试官可能会问"你们大概多少钱一次请求"）
-# - Singleton 模式追踪全会话
 
 import os
 import json
@@ -19,11 +10,6 @@ from dataclasses import dataclass, field
 from typing import Optional, List, Dict
 from pathlib import Path
 
-# ============================================================
-# 定价表（元/1K tokens）
-# 面试官可能问：为什么输入和输出价格不一样？
-# 答：输出 tokens 的生成需要自回归计算，计算量远大于输入的前向传播
-# ============================================================
 MODEL_PRICING = {
     "deepseek-chat": {
         "input": 0.0005,   # ¥0.5 / 1M tokens → ¥0.0005 / 1K tokens
@@ -35,7 +21,6 @@ MODEL_PRICING = {
     },
 }
 
-
 @dataclass
 class UsageRecord:
     """单次 LLM 调用的用量记录"""
@@ -46,7 +31,6 @@ class UsageRecord:
     cost_cny: float = 0.0
     timestamp: str = ""
     model: str = "deepseek-chat"
-
 
 class TokenTracker:
     """全局 Token 追踪器（Singleton）
@@ -261,7 +245,6 @@ class TokenTracker:
         """清空当前 session 的记录"""
         self.records = []
         self.session_start = datetime.now().isoformat()
-
 
 # ============================================================
 # 全局单例（整个应用共享一个 tracker）

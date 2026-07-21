@@ -1,21 +1,11 @@
 # agent/agents/interview_evaluator.py
 # InterviewEvaluatorAgent — 面试回答评估专用 Agent
 #
-# 面试话术：
-# "面试者回答完问题后，InterviewEvaluator 会从 4 个维度评估答案质量：
-#  技术准确性、逻辑结构、表达清晰度、改进空间。
-#  它和 QuestionGenerator 是两个独立 Agent，一个负责出题一个负责评分，
-#  职责分离让每个 Agent 的 prompt 更聚焦。"
-#
-# 面试考点：
-# - 评估 Agent 的 temperature 居中 (0.4)：需要判断力但不要过于随机
-# - 评估维度设计体现了对面试流程的理解
 
 from typing import Any
 
 from agent.agents.base_agent import BaseAgent
 from agent.state import JobState
-
 
 class InterviewEvaluatorAgent(BaseAgent):
     """面试回答评估 Agent
