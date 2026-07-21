@@ -28,6 +28,7 @@ function App() {
     reset,
     streamReport,
     interviewAvailable,
+    currentStep,
   } = useAgent();
 
   const [resume, setResume] = useState('5年Java经验，Spring Cloud，高并发项目经验');
@@ -106,6 +107,23 @@ function App() {
             setRole={setRole}
             loading={loading}
           />
+        )}
+
+        {/* 处理中指示器（planner/executor 运行时显示） */}
+        {currentStep && !streamReport && status !== 'finished' && (
+          <div style={{
+            textAlign: 'center', padding: '24px', marginTop: '20px',
+            background: 'white', borderRadius: '16px', boxShadow: '0 2px 12px rgba(0,0,0,0.06)',
+            animation: 'fadeInUp 0.3s ease',
+          }}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 12 }}>
+              <div className="processing-spinner" />
+              <span style={{ color: '#7c3aed', fontWeight: 600, fontSize: '1rem' }}>{currentStep}...</span>
+            </div>
+            <p style={{ color: '#9ca3af', fontSize: '0.85rem', marginTop: 8 }}>
+              正在分析你的简历和目标岗位
+            </p>
+          </div>
         )}
 
         {/* 对话/面试区（streaming 时也要显示） */}

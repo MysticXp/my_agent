@@ -17,7 +17,8 @@ export const useAgent = () => {
   const [streaming, setStreaming] = useState(false);
   const [streamReport, setStreamReport] = useState('');
   const [interviewAvailable, setInterviewAvailable] = useState(false);
-  const streamReportRef = useRef(''); // ref 版本，闭包安全
+  const [currentStep, setCurrentStep] = useState(''); // 当前执行步骤（如"分析需求"）
+  const streamReportRef = useRef('');
   const abortRef = useRef(null);
 
   // SSE 流式提交（优先使用）
@@ -31,6 +32,8 @@ export const useAgent = () => {
     // answer 的消息由调用方（decideInterview / handleAnswerSubmit）自行记录
 
     abortRef.current = streamChat('/chat/stream', payload, {
+      onNodeStart: (node, label) => { setCurrentStep(label); },
+      onNodeEnd: () => {},
       onToken: (token) => {
         streamReportRef.current += token;
         setStreamReport(streamReportRef.current);
@@ -38,6 +41,7 @@ export const useAgent = () => {
       onInterrupt: (data) => {
         setStreamReport('');
         streamReportRef.current = '';
+        setCurrentStep('');
         setLoading(false);
         setStreaming(false);
         if (data.type === 'fit_review') {
@@ -78,6 +82,7 @@ export const useAgent = () => {
       onError: (err) => {
         setStreamReport('');
         streamReportRef.current = '';
+        setCurrentStep('');
         setLoading(false);
         setStreaming(false);
         setStatus('error');
@@ -199,6 +204,7 @@ export const useAgent = () => {
     setStreamReport('');
     streamReportRef.current = '';
     setInterviewAvailable(false);
+    setCurrentStep('');
   }, []);
 
   return {
@@ -216,6 +222,7 @@ export const useAgent = () => {
     streaming,
     streamReport,
     interviewAvailable,
+    currentStep,
     submit,
     decideInterview,
     startInterview,
