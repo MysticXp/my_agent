@@ -103,16 +103,12 @@ async def _stream_agent(input_data: dict, is_resume: bool = False):
             # ---- 节点开始/结束 ----
             if evt == "on_chain_start" and name in NODE_LABELS:
                 streaming_node = name
-                if name == "aggregator":
-                    yield {"event": "node_start", "data": json.dumps(
-                        {"node": name, "label": NODE_LABELS[name]}, ensure_ascii=False)}
+                yield {"event": "node_start", "data": json.dumps(
+                    {"node": name, "label": NODE_LABELS[name]}, ensure_ascii=False)}
                 continue
 
             if evt == "on_chain_end" and name in NODE_LABELS:
                 streaming_node = None
-                if name == "aggregator":
-                    yield {"event": "node_end", "data": json.dumps(
-                        {"node": name}, ensure_ascii=False)}
                 continue
 
             # ---- 逐 token 流（仅 aggregator 节点输出到前端，跳过 planner/executor 的 JSON plan） ----
