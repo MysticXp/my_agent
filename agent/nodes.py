@@ -27,7 +27,6 @@ from agent.token_tracker import token_tracker
 # ===== 工具函数（Agent 内部会用到） =====
 from tools.resume_optimizer import optimize_resume
 from tools.jd_retriever import search_similar_jds, build_rag_context
-from tools.question_store import get_questions, build_avoid_context
 
 # ===== Agent 实例（全局单例，只初始化一次） =====
 _resume_analyzer = None
@@ -94,22 +93,6 @@ def planner_node(state: JobState) -> JobState:
                 state["similar_jds"] = []
                 state["rag_context"] = ""
 
-    # 检索历史面试题（按岗位/公司精确匹配，无需向量检索）
-    similar_questions = []
-    question_context = ""
-    role = state.get("role") or ""
-    company = state.get("company") or ""
-    if role:
-        try:
-            similar_questions = get_questions(role=role, company=company)
-            state["similar_questions"] = similar_questions
-            if similar_questions:
-                question_context = build_avoid_context(role=role, company=company)
-            print(f"[Planner] 历史面试题检索: 岗位={role}, 共 {len(similar_questions)} 道")
-        except Exception as e:
-            print(f"[Planner] 面试题检索失败（非致命）: {e}")
-            state["similar_questions"] = []
-
     # 构建 JD 上下文（没有 JD 但有 RAG 结果时，引导 LLM 使用历史 JD）
     jd_text = state.get("job_description", "")
     if not jd_text:
@@ -125,7 +108,6 @@ def planner_node(state: JobState) -> JobState:
         role=state.get("role") or "（未填写）",
         job_description=jd_text,
         rag_context=rag_context or "（无历史JD记录）",
-        question_context=question_context or "（无历史面试题记录）",
     )
 
     try:

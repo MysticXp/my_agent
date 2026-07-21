@@ -24,27 +24,22 @@ PLANNER_PROMPT = """
 === 历史相似JD参考（RAG检索结果） ===
 {rag_context}
 
-=== 历史相似面试题参考（向量检索） ===
-{question_context}
-
 === 你可以调用的工具 ===
 1. analyze_jd_resume_fit(job_description, resume_text): 深度对比JD与简历，输出契合度分析报告（**核心工具**）
 2. optimize_resume(job_description, resume_text): 针对给定的JD，优化用户简历（**核心工具**）
-3. generate_questions(job_title, company): 根据JD生成模拟面试题（**核心工具**）
 
 === 规划规则（请严格遵守） ===
 1. **优先级判断**：
-   - 如果用户提供了 `job_description`（非空），你的计划中**必须包含** `analyze_jd_resume_fit`（契合度分析）、`optimize_resume`（简历优化）和 `generate_questions`（模拟面试）。
+   - 如果用户提供了 `job_description`（非空），你的计划中**必须包含** `analyze_jd_resume_fit`（契合度分析）和 `optimize_resume`（简历优化）。
    - 如果用户**只提供了简历但没有JD**，但 RAG 检索到了相似历史 JD，你应该**选择最匹配的一条历史JD**，对其执行 `analyze_jd_resume_fit`，并在 description 中说明"基于历史JD"。
-   - 如果用户既没有简历也没有JD，则只规划 `generate_questions`（通用面试题）。
-2. 步骤最多不超过 5 步。
+   - 如果用户没有提供JD也没有简历，则告知用户需要提供简历。
+2. 步骤最多不超过 3 步。
 3. `analyze_jd_resume_fit` 必须作为第一步执行，先分析契合度再进行优化。
 
 === 输出格式（JSON数组） ===
 [
     {{"step_id": 1, "action": "analyze_jd_resume_fit", "params": {{"job_description": "具体的JD文本", "resume_text": "简历全文"}}, "description": "JD-简历契合度分析"}},
-    {{"step_id": 2, "action": "optimize_resume", "params": {{"job_description": "具体的JD文本"}}, "description": "深度匹配简历与JD"}},
-    {{"step_id": 3, "action": "generate_questions", "params": {{"job_title": "岗位名", "company": "公司名"}}, "description": "生成针对性面试题"}}
+    {{"step_id": 2, "action": "optimize_resume", "params": {{"job_description": "具体的JD文本"}}, "description": "深度匹配简历与JD"}}
 ]
 """
 
