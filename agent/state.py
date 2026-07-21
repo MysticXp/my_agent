@@ -57,7 +57,7 @@ class JobState(TypedDict):
     """当前执行到第几步（从0开始计数）"""
     
     max_steps: int
-    """最大允许执行步数，防止死循环（面试常问！）"""
+    """最大允许执行步数，防止死循环"""
     
     # ---------- RAG 检索结果 ----------
     similar_jds: List[Dict[str, Any]]
@@ -115,7 +115,6 @@ class JobState(TypedDict):
         "estimated_cost_cny": 0.0123,
         "agent_breakdown": { "ResumeAnalyzer": {...}, ... }
     }
-    面试常考：成本控制是生产环境 Agent 的第一道坎
     """
 
     # ---------- 记忆系统 ----------
@@ -134,7 +133,6 @@ class JobState(TypedDict):
         "min_salary": 80000
     }
     """
-
 
 # =====================================================
 # 2. 状态初始化工具函数
@@ -202,7 +200,6 @@ def create_initial_state(
         user_preferences={}
     )
 
-
 def update_state_with_preferences(
     state: JobState, 
     preferences: Dict[str, Any]
@@ -214,7 +211,6 @@ def update_state_with_preferences(
     """
     state["user_preferences"].update(preferences)
     return state
-
 
 # =====================================================
 # 3. 辅助函数（用于调试和展示）
@@ -231,26 +227,3 @@ def state_summary(state: JobState) -> str:
     ==========================
     """
 
-
-# =====================================================
-# 4. 面试知识点（写在代码注释里方便你背）
-# =====================================================
-"""
-【面试官常问】为什么用 TypedDict 而不是 Pydantic 或普通 Class？
-答：
-1. TypedDict 是原生 Python 类型，LangGraph 原生支持，序列化更轻量。
-2. Pydantic 虽然校验更强，但在状态图频繁读写时会有性能开销。
-3. TypedDict 配合 MyPy 可以做静态类型检查，适合大型项目。
-
-【面试官常问】max_steps 怎么确定？设多少合适？
-答：
-根据任务复杂度动态调整。求职场景通常 3-5 步足够（搜索→优化→面试→薪资）。
-如果超过 5 步还未完成，大概率 Agent 陷入循环或逻辑错误，
-此时应该抛出异常并记录日志，而不是无限等待。
-
-【面试官常问】如何防止状态污染？
-答：
-每次新对话调用 create_initial_state() 创建全新状态，
-历史记忆通过 user_preferences 和 conversation_history 显式控制，
-避免不同用户的请求相互影响。
-"""

@@ -1,14 +1,6 @@
 # agent/agents/base_agent.py
 # 所有专用 Agent 的基类
 #
-# 面试考点：
-# 1. 为什么需要 Agent 抽象？
-#    - 每个 Agent 有独立的 LLM 实例、temperature、system prompt
-#    - 职责单一 → 可独立测试 → 可独立优化
-#    - 面试官问"你做过 Multi-Agent 吗？"直接答这个
-# 2. 为什么 token tracking 做在基类？
-#    - 所有子类自动获得追踪能力，不需要重复写
-#    - 生产环境成本追踪是最容易被忽略但最重要的事
 
 import os
 from abc import ABC, abstractmethod
@@ -18,7 +10,6 @@ from langchain_deepseek import ChatDeepSeek
 
 from agent.state import JobState
 from agent.token_tracker import token_tracker
-
 
 class BaseAgent(ABC):
     """Agent 基类：提供标准化的 LLM 调用 + 自动 Token 追踪
